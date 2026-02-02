@@ -1,6 +1,6 @@
 {
-  "name": "紫悦阅读",
-  "short_name": "紫悦",
+  "name": "MOZI",
+  "short_name": "MOZI",
   "description": "iOS 风格的本地电子书阅读器",
   "start_url": "./design_v14_functionality.html",
   "display": "standalone",
@@ -8,15 +8,15 @@
   "theme_color": "#bb86fc",
   "icons": [
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./icon/mozi_icon_192.png?v=2",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "./icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "./icon/mozi_icon_512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
