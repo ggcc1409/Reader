@@ -8,8 +8,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="紫悦阅读">
-    <link rel="apple-touch-icon" id="appleTouchIcon" href="./icon.svg?v=8">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=8">
+    <link rel="apple-touch-icon" id="appleTouchIcon" href="./icon.svg?v=9">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=9">
     <meta name="theme-color" content="#141218">
 
     <!-- Libraries -->
@@ -98,6 +98,8 @@
             box-shadow: 0 0 60px rgba(127, 90, 240, 0.15);
             border-radius: 44px;
             border: 8px solid #222;
+            transform: scale(var(--frame-scale, 1));
+            transform-origin: center;
         }
 
         /* Mobile/PWA Mode Overrides */
@@ -123,6 +125,7 @@
                 box-shadow: none;
                 position: absolute;
                 top: 0; left: 0;
+                transform: none;
             }
             @supports (-webkit-touch-callout: none) {
                 body { height: -webkit-fill-available; }
@@ -528,7 +531,7 @@
             top: 4px;
             bottom: 4px;
             left: 4px;
-            width: calc((100% - 8px) / 3);
+            width: calc((100% - 8px) / 2);
             border-radius: 8px;
             background: rgba(255,255,255,0.16);
             box-shadow: 0 8px 22px rgba(0,0,0,0.18);
@@ -630,6 +633,23 @@
 
         .reader-title-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
         .reader-page-indicator { font-size: 12px; opacity: 0.65; line-height: 1; }
+        .reader-chapter-page-indicator {
+            position: absolute;
+            left: 50%;
+            bottom: calc(82px + env(safe-area-inset-bottom) + 8px);
+            transform: translateX(-50%);
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(0,0,0,0.45);
+            color: #fff;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            font-size: 12px;
+            line-height: 1;
+            opacity: 0.75;
+            pointer-events: none;
+            z-index: 309;
+        }
 
         /* Settings Bar (Slide up) */
         .settings-bar {
@@ -1048,6 +1068,7 @@
 
             <!-- Content -->
             <div class="reader-content" id="readerContent"></div>
+            <div class="reader-chapter-page-indicator" id="readerChapterPageIndicator"></div>
 
             <!-- Bottom Bar (Fanqie Style: Catalog | Night | Settings) -->
             <div class="reader-bottom-bar" style="justify-content: space-evenly;">
@@ -1107,7 +1128,6 @@
                         <div class="flip-indicator" id="flipModeIndicator"></div>
                         <div class="flip-option active" id="opt-scroll" onclick="event.stopPropagation(); setFlipMode('scroll')">滚动</div>
                         <div class="flip-option" id="opt-slide" onclick="event.stopPropagation(); setFlipMode('slide')">平移</div>
-                        <div class="flip-option" id="opt-sim" onclick="event.stopPropagation(); setFlipMode('simulation')">仿真</div>
                     </div>
                 </div>
             </div>
@@ -1132,6 +1152,46 @@
         if ('scrollRestoration' in history) {
             try { history.scrollRestoration = 'manual'; } catch (e) {}
         }
+
+        function updateFrameScale() {
+            try {
+                const isMobile = window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+                const scale = isMobile ? 1 : Math.min(1, (window.innerWidth - 40) / 428, (window.innerHeight - 40) / 926);
+                document.documentElement.style.setProperty('--frame-scale', String(Math.max(0.25, Number.isFinite(scale) ? scale : 1)));
+            } catch (e) {}
+        }
+
+        updateFrameScale();
+        window.addEventListener('resize', updateFrameScale, { passive: true });
+
+        async function ensureIosHomeIcon() {
+            const link = document.getElementById('appleTouchIcon');
+            if (!link) return;
+            try { link.setAttribute('sizes', '180x180'); } catch (e) {}
+            try {
+                const res = await fetch('./icon.svg?v=9', { cache: 'force-cache' });
+                if (!res || !res.ok) return;
+                const svg = await res.text();
+                const img = new Image();
+                const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+                const loaded = new Promise((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = () => reject(new Error('icon load failed'));
+                });
+                img.src = svgUrl;
+                await loaded;
+                const size = 180;
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                ctx.drawImage(img, 0, 0, size, size);
+                link.href = canvas.toDataURL('image/png');
+            } catch (e) {}
+        }
+
+        ensureIosHomeIcon();
 
         // --- Storage Layer (IndexedDB) ---
         const DB_NAME = 'ReaderAppDB';
@@ -1776,25 +1836,27 @@
 
         function setFlipMode(mode) {
             let nextMode = mode;
-            if ((nextMode === 'slide' || nextMode === 'simulation') && !currentTxtContent) nextMode = 'scroll';
+            if (nextMode === 'simulation') nextMode = 'slide';
+            if (nextMode === 'slide' && !currentTxtContent) nextMode = 'scroll';
             currentFlipMode = nextMode;
             try { localStorage.setItem('reader_flip_mode_last', String(currentFlipMode)); } catch (e) {}
             // Update UI
             document.querySelectorAll('.flip-option').forEach(el => el.classList.remove('active'));
-            document.getElementById('opt-' + (nextMode === 'simulation' ? 'sim' : nextMode)).classList.add('active');
+            const opt = document.getElementById('opt-' + nextMode);
+            if (opt) opt.classList.add('active');
             try {
                 const indicator = document.getElementById('flipModeIndicator');
                 if (indicator) {
-                    const idx = nextMode === 'scroll' ? 0 : (nextMode === 'slide' ? 1 : 2);
+                    const idx = nextMode === 'scroll' ? 0 : 1;
                     indicator.style.transform = `translateX(${idx * 100}%)`;
                 }
             } catch (e) {}
             // Apply logic
             const contentArea = document.getElementById('readerContent');
             const readerView = document.getElementById('readerView');
-            if (nextMode === 'slide' || nextMode === 'simulation') {
+            if (nextMode === 'slide') {
                 contentArea.classList.remove('mode-scroll');
-                contentArea.classList.add(nextMode === 'slide' ? 'mode-slide' : 'mode-sim');
+                contentArea.classList.add('mode-slide');
                 readerView.classList.add('flip-slide');
                 if (contentArea.scrollTop) contentArea.scrollTop = 0;
                 buildTxtPagedView(nextMode, Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
@@ -1803,7 +1865,6 @@
             }
             contentArea.classList.add('mode-scroll');
             contentArea.classList.remove('mode-slide');
-            contentArea.classList.remove('mode-sim');
             readerView.classList.remove('flip-slide');
             destroyTxtPagedView(Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
             if (contentArea.scrollLeft) contentArea.scrollLeft = 0;
@@ -2715,14 +2776,28 @@
 
         function updatePageIndicatorByTxtPos(absolutePos) {
             const el = document.getElementById('readerPageIndicator');
-            if (!el) return;
+            const chapEl = document.getElementById('readerChapterPageIndicator');
+            if (!el && !chapEl) return;
             if (!currentTxtContent || !Number.isFinite(absolutePos)) {
-                el.textContent = '';
+                if (el) el.textContent = '';
+                if (chapEl) chapEl.textContent = '';
                 return;
             }
             const totalPages = Math.max(1, Math.ceil(currentTxtContent.length / TXT_PAGE_SIZE));
             const currentPage = Math.max(1, Math.min(totalPages, Math.floor(absolutePos / TXT_PAGE_SIZE) + 1));
-            el.textContent = `${currentPage}/${totalPages}`;
+            if (el) el.textContent = `${currentPage}/${totalPages}`;
+            if (chapEl && currentTxtToc && currentTxtToc.length > 0) {
+                const chapterIndex = computeTxtChapterIndexByAbsPos(absolutePos);
+                const start = currentTxtToc[chapterIndex] && Number.isFinite(currentTxtToc[chapterIndex].position) ? currentTxtToc[chapterIndex].position : 0;
+                const end = (chapterIndex + 1 < currentTxtToc.length) && currentTxtToc[chapterIndex + 1] && Number.isFinite(currentTxtToc[chapterIndex + 1].position)
+                    ? currentTxtToc[chapterIndex + 1].position
+                    : currentTxtContent.length;
+                const totalChapterPages = Math.max(1, Math.ceil(Math.max(1, end - start) / TXT_PAGE_SIZE));
+                const chapterPage = Math.max(1, Math.min(totalChapterPages, Math.floor(Math.max(0, absolutePos - start) / TXT_PAGE_SIZE) + 1));
+                chapEl.textContent = `第${chapterPage}/${totalChapterPages}页`;
+            } else if (chapEl) {
+                chapEl.textContent = '';
+            }
         }
 
         function updateActiveTxtTocByPos(absolutePos) {
@@ -2876,10 +2951,12 @@
                         let desiredFlipMode = 'scroll';
                         try {
                             const raw = savedProgress && savedProgress.flipMode ? String(savedProgress.flipMode) : '';
-                            if (raw === 'scroll' || raw === 'slide' || raw === 'simulation') desiredFlipMode = raw;
+                            if (raw === 'scroll' || raw === 'slide') desiredFlipMode = raw;
+                            else if (raw === 'simulation') desiredFlipMode = 'slide';
                             else {
                                 const last = localStorage.getItem('reader_flip_mode_last');
-                                if (last === 'scroll' || last === 'slide' || last === 'simulation') desiredFlipMode = last;
+                                if (last === 'scroll' || last === 'slide') desiredFlipMode = last;
+                                else if (last === 'simulation') desiredFlipMode = 'slide';
                             }
                         } catch (e) {}
                         const savedAnchorId = savedProgress && savedProgress.activeElementId ? String(savedProgress.activeElementId) : null;
@@ -2902,7 +2979,7 @@
                         const chunkStart = Math.max(0, Math.floor(absolutePos / CHUNK_SIZE) * CHUNK_SIZE);
                         debugLog('txt open: restore plan', { absolutePos, posFromCfi, posFromRatio, chunkStart, ratio });
                         currentFlipMode = desiredFlipMode;
-                        if (desiredFlipMode === 'slide' || desiredFlipMode === 'simulation') {
+                        if (desiredFlipMode === 'slide') {
                             contentArea.setAttribute('data-chunk-start', String(chunkStart));
                             contentArea.setAttribute('data-render-length', String(Math.min(CHUNK_SIZE, currentTxtContent.length - chunkStart)));
                             if (chunkStart + CHUNK_SIZE < currentTxtContent.length) contentArea.setAttribute('data-next-start', String(chunkStart + CHUNK_SIZE));
