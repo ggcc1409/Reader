@@ -1,0 +1,74 @@
+{
+  "bookId": "book_1769673973487",
+  "isRestoringTxt": false,
+  "isClosingReader": false,
+  "ui": {
+    "readerView": "reader-view",
+    "tocPanel": "toc-panel",
+    "tocOverlay": "toc-overlay",
+    "settingsPanel": "settings-panel",
+    "moreMenu": "more-menu"
+  },
+  "content": {
+    "top": 172.44444274902344,
+    "h": 33828,
+    "ch": 910,
+    "chunkStart": 135000,
+    "loadedLength": 15000,
+    "nextStart": "150000"
+  },
+  "doc": {
+    "top": 0
+  },
+  "lastTxt": {
+    "absolutePos": 135084,
+    "percent": 4,
+    "chunkStart": 135000,
+    "scrollTop": 172.44444274902344,
+    "scrollRatio": 0.005238606317182801,
+    "ratio": 0.0371700526330851,
+    "loadedLength": 15000
+  }
+}
+
+08:34:54 txt open: savedProgress {"id":"book_1769673973487","savedProgress":{"bookId":"book_1769673973487","cfi":"105363","percentage":3,"scrollTop":737.7777709960938,"chunkStart":105000,"timestamp":1769675692013,"kind":"txt","ratio":0.02899194764427871,"scrollRatio":0.02311261461094871,"loadedLength":15000,"resumeStart":105000}}
+08:34:54 txt open: restore plan {"absolutePos":105363,"posFromCfi":105363,"posFromRatio":105363,"chunkStart":105000,"ratio":0.02899194764427871}
+08:34:54 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":105464,"percent":3,"scrollTop":900.4444580078125,"chunkStart":105000,"scrollRatio":0.02820852911900669,"ratio":0.02901973905788759,"loadedLength":15000,"resumeStart":105000}}
+08:34:54 saveProgress {"bookId":"book_1769673973487","cfi":"105464","percentage":3,"scrollTop":900.4444580078125,"chunkStart":105000,"extra":{"kind":"txt","ratio":0.02901973905788759,"scrollRatio":0.02820852911900669,"loadedLength":15000,"resumeStart":105000}}
+08:34:55 saveTxtProgressFromView {"reason":"close","data":{"absolutePos":105464,"percent":3,"scrollTop":900.4444580078125,"chunkStart":105000,"scrollRatio":0.02820852911900669,"ratio":0.02901973905788759,"loadedLength":15000,"resumeStart":105000}}
+08:34:55 saveProgress {"bookId":"book_1769673973487","cfi":"105464","percentage":3,"scrollTop":900.4444580078125,"chunkStart":105000,"extra":{"kind":"txt","ratio":0.02901973905788759,"scrollRatio":0.02820852911900669,"loadedLength":15000,"resumeStart":105000}}
+08:34:55 closeBook start {"bookId":"book_1769673973487"}
+08:34:55 saveTxtProgressFromView {"reason":"close","data":{"absolutePos":105464,"percent":3,"scrollTop":900.4444580078125,"chunkStart":105000,"scrollRatio":0.02820852911900669,"ratio":0.02901973905788759,"loadedLength":15000,"resumeStart":105000}}
+08:34:55 saveProgress {"bookId":"book_1769673973487","cfi":"105464","percentage":3,"scrollTop":900.4444580078125,"chunkStart":105000,"extra":{"kind":"txt","ratio":0.02901973905788759,"scrollRatio":0.02820852911900669,"loadedLength":15000,"resumeStart":105000}}
+08:34:55 saveProgress {"bookId":"book_1769673973487","cfi":"105464","percentage":3,"scrollTop":900.4444580078125,"chunkStart":105000,"extra":{"kind":"txt","ratio":0.02901973905788759,"scrollRatio":0.02820852911900669,"loadedLength":15000,"resumeStart":105000}}
+08:34:55 closeBook end {"bookId":"book_1769673973487"}
+08:34:56 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":120000,"percent":3,"scrollTop":0,"chunkStart":105000,"scrollRatio":0,"ratio":0.033019501317478106,"loadedLength":30000,"resumeStart":120000}}
+08:34:56 saveProgress {"bookId":"book_1769673973487","cfi":"120000","percentage":3,"scrollTop":0,"chunkStart":105000,"extra":{"kind":"txt","ratio":0.033019501317478106,"scrollRatio":0,"loadedLength":30000,"resumeStart":120000}}
+08:34:56 txt open: savedProgress {"id":"book_1769673973487","savedProgress":{"bookId":"book_1769673973487","cfi":"120000","percentage":3,"scrollTop":0,"chunkStart":105000,"timestamp":1769675696340,"kind":"txt","ratio":0.033019501317478106,"scrollRatio":0,"loadedLength":30000,"resumeStart":120000}}
+08:34:56 txt open: restore plan {"absolutePos":120000,"posFromCfi":120000,"posFromRatio":120000,"chunkStart":120000,"ratio":0.033019501317478106}
+08:34:57 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":120030,"percent":3,"scrollTop":172.44444274902344,"chunkStart":120000,"scrollRatio":0.005367252100875328,"ratio":0.03302775619280747,"loadedLength":15000,"resumeStart":120000}}
+08:34:57 saveProgress {"bookId":"book_1769673973487","cfi":"120030","percentage":3,"scrollTop":172.44444274902344,"chunkStart":120000,"extra":{"kind":"txt","ratio":0.03302775619280747,"scrollRatio":0.005367252100875328,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":120030,"percent":3,"scrollTop":172.44444274902344,"chunkStart":120000,"scrollRatio":0.005367252100875328,"ratio":0.03302775619280747,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 saveProgress {"bookId":"book_1769673973487","cfi":"120030","percentage":3,"scrollTop":172.44444274902344,"chunkStart":120000,"extra":{"kind":"txt","ratio":0.03302775619280747,"scrollRatio":0.005367252100875328,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 saveTxtProgressFromView {"reason":"close","data":{"absolutePos":120030,"percent":3,"scrollTop":172.44444274902344,"chunkStart":120000,"scrollRatio":0.005367252100875328,"ratio":0.03302775619280747,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 saveProgress {"bookId":"book_1769673973487","cfi":"120030","percentage":3,"scrollTop":172.44444274902344,"chunkStart":120000,"extra":{"kind":"txt","ratio":0.03302775619280747,"scrollRatio":0.005367252100875328,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 closeBook start {"bookId":"book_1769673973487"}
+08:34:58 saveTxtProgressFromView {"reason":"close","data":{"absolutePos":120030,"percent":3,"scrollTop":172.44444274902344,"chunkStart":120000,"scrollRatio":0.005367252100875328,"ratio":0.03302775619280747,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 saveProgress {"bookId":"book_1769673973487","cfi":"120030","percentage":3,"scrollTop":172.44444274902344,"chunkStart":120000,"extra":{"kind":"txt","ratio":0.03302775619280747,"scrollRatio":0.005367252100875328,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 saveProgress {"bookId":"book_1769673973487","cfi":"120030","percentage":3,"scrollTop":172.44444274902344,"chunkStart":120000,"extra":{"kind":"txt","ratio":0.03302775619280747,"scrollRatio":0.005367252100875328,"loadedLength":15000,"resumeStart":120000}}
+08:34:58 closeBook end {"bookId":"book_1769673973487"}
+08:34:59 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":135000,"percent":4,"scrollTop":0,"chunkStart":120000,"scrollRatio":0,"ratio":0.03714693898216286,"loadedLength":30000,"resumeStart":135000}}
+08:34:59 saveProgress {"bookId":"book_1769673973487","cfi":"135000","percentage":4,"scrollTop":0,"chunkStart":120000,"extra":{"kind":"txt","ratio":0.03714693898216286,"scrollRatio":0,"loadedLength":30000,"resumeStart":135000}}
+08:34:59 txt open: savedProgress {"id":"book_1769673973487","savedProgress":{"bookId":"book_1769673973487","cfi":"135000","percentage":4,"scrollTop":0,"chunkStart":120000,"timestamp":1769675699386,"kind":"txt","ratio":0.03714693898216286,"scrollRatio":0,"loadedLength":30000,"resumeStart":135000}}
+08:34:59 txt open: restore plan {"absolutePos":135000,"posFromCfi":135000,"posFromRatio":135000,"chunkStart":135000,"ratio":0.03714693898216286}
+08:35:00 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":135084,"percent":4,"scrollTop":172.44444274902344,"chunkStart":135000,"scrollRatio":0.005238606317182801,"ratio":0.0371700526330851,"loadedLength":15000,"resumeStart":135000}}
+08:35:00 saveProgress {"bookId":"book_1769673973487","cfi":"135084","percentage":4,"scrollTop":172.44444274902344,"chunkStart":135000,"extra":{"kind":"txt","ratio":0.0371700526330851,"scrollRatio":0.005238606317182801,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 saveTxtProgressFromView {"reason":"auto","data":{"absolutePos":135084,"percent":4,"scrollTop":172.44444274902344,"chunkStart":135000,"scrollRatio":0.005238606317182801,"ratio":0.0371700526330851,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 saveProgress {"bookId":"book_1769673973487","cfi":"135084","percentage":4,"scrollTop":172.44444274902344,"chunkStart":135000,"extra":{"kind":"txt","ratio":0.0371700526330851,"scrollRatio":0.005238606317182801,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 saveTxtProgressFromView {"reason":"close","data":{"absolutePos":135084,"percent":4,"scrollTop":172.44444274902344,"chunkStart":135000,"scrollRatio":0.005238606317182801,"ratio":0.0371700526330851,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 saveProgress {"bookId":"book_1769673973487","cfi":"135084","percentage":4,"scrollTop":172.44444274902344,"chunkStart":135000,"extra":{"kind":"txt","ratio":0.0371700526330851,"scrollRatio":0.005238606317182801,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 closeBook start {"bookId":"book_1769673973487"}
+08:35:01 saveTxtProgressFromView {"reason":"close","data":{"absolutePos":135084,"percent":4,"scrollTop":172.44444274902344,"chunkStart":135000,"scrollRatio":0.005238606317182801,"ratio":0.0371700526330851,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 saveProgress {"bookId":"book_1769673973487","cfi":"135084","percentage":4,"scrollTop":172.44444274902344,"chunkStart":135000,"extra":{"kind":"txt","ratio":0.0371700526330851,"scrollRatio":0.005238606317182801,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 saveProgress {"bookId":"book_1769673973487","cfi":"135084","percentage":4,"scrollTop":172.44444274902344,"chunkStart":135000,"extra":{"kind":"txt","ratio":0.0371700526330851,"scrollRatio":0.005238606317182801,"loadedLength":15000,"resumeStart":135000}}
+08:35:01 closeBook end {"bookId":"book_1769673973487"}
