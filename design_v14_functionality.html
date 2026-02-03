@@ -481,7 +481,7 @@
         
         .reader-bottom-bar {
             position: absolute; left: 0; right: 0; bottom: 0;
-            padding-top: 10px;
+            padding-top: 0;
             padding-left: 16px; padding-right: 16px;
             padding-bottom: env(safe-area-inset-bottom);
             margin-bottom: 0;
@@ -496,9 +496,19 @@
             z-index: 310;
             display: flex;
             align-items: center;
+            justify-content: center;
+            gap: 10px;
+            height: calc(82px + env(safe-area-inset-bottom));
+        }
+        .reader-bottom-bar-inner {
+            width: 100%;
+            height: 82px;
+            display: flex;
+            align-items: center;
             justify-content: space-evenly;
             gap: 10px;
-            min-height: calc(82px + env(safe-area-inset-bottom));
+            padding-top: 0;
+            padding-bottom: 0;
         }
         
         .reader-view.menu-visible .reader-top-bar { transform: translateY(0); opacity: 1; pointer-events: auto; }
@@ -648,6 +658,8 @@
             width: 60px;
         }
         .reader-btn svg { width: 24px; height: 24px; }
+        .reader-bottom-bar .reader-btn { height: 60px; padding: 0; justify-content: center; line-height: 1; }
+        .reader-bottom-bar .reader-btn span { line-height: 1; }
 
         .reader-title-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
         .reader-page-indicator { font-size: 12px; opacity: 0.65; line-height: 1; }
@@ -854,6 +866,28 @@
             cursor: pointer;
         }
         .query-action:active { opacity: 0.7; }
+        .query-result {
+            flex: 1;
+            min-height: 120px;
+            border-radius: 14px;
+            border: 1px solid rgba(128,128,128,0.14);
+            background: rgba(128,128,128,0.06);
+            padding: 12px;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .query-result,
+        .query-result * {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        .query-result-title { font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+        .query-result-meta { font-size: 12px; opacity: 0.75; margin-bottom: 10px; }
+        .query-result-section { margin-top: 10px; }
+        .query-result-section-title { font-size: 13px; font-weight: 800; margin-bottom: 6px; }
+        .query-result-list { display: flex; flex-direction: column; gap: 6px; }
+        .query-result-item { font-size: 13px; line-height: 1.55; opacity: 0.92; }
+        .query-result-hint { font-size: 12px; opacity: 0.7; line-height: 1.55; }
 
         /* More Menu */
         .more-menu {
@@ -1178,6 +1212,7 @@
                     </div>
                     <button class="query-action" style="width:72px; height:36px;" onclick="event.stopPropagation(); hideSelectionQueryPanel()">关闭</button>
                 </div>
+                <div class="query-result" id="queryResult"></div>
                 <div class="query-actions">
                     <button class="query-action" onclick="event.stopPropagation(); openSelectionQuery('youdao')">怎么读</button>
                     <button class="query-action" onclick="event.stopPropagation(); openSelectionQuery('baidu_hanyu')">百度汉语</button>
@@ -1187,19 +1222,21 @@
             </div>
 
             <!-- Bottom Bar (Fanqie Style: Catalog | Night | Settings) -->
-            <div class="reader-bottom-bar" style="justify-content: space-evenly;">
-                <button class="reader-btn" id="tocButton" onclick="event.stopPropagation(); toggleToc()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                    <span>目录</span>
-                </button>
-                <button class="reader-btn" id="nightButton" onclick="event.stopPropagation(); toggleNightMode()">
-                    <svg id="nightModeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-                    <span id="nightModeText">夜间</span>
-                </button>
-                <button class="reader-btn" id="settingsButton" onclick="event.stopPropagation(); toggleSettings()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                    <span>设置</span>
-                </button>
+            <div class="reader-bottom-bar">
+                <div class="reader-bottom-bar-inner">
+                    <button class="reader-btn" id="tocButton" onclick="event.stopPropagation(); toggleToc()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                        <span>目录</span>
+                    </button>
+                    <button class="reader-btn" id="nightButton" onclick="event.stopPropagation(); toggleNightMode()">
+                        <svg id="nightModeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        <span id="nightModeText">夜间</span>
+                    </button>
+                    <button class="reader-btn" id="settingsButton" onclick="event.stopPropagation(); toggleSettings()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span>设置</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Settings Panel -->
@@ -2658,18 +2695,17 @@
                 if (!e || !e.changedTouches || !e.changedTouches[0]) return;
                 const t = e.changedTouches[0];
                 if (currentFlipMode === 'scroll') {
-                    if (hasAnyReaderPanelOpen()) return;
                     const dx = (t.clientX || 0) - txtFlipStartX;
                     const dy = (t.clientY || 0) - txtFlipStartY;
                     const dt = Math.max(1, Date.now() - txtFlipStartAt);
                     const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
                     if (click) {
-                        try {
-                            const sel = window.getSelection ? window.getSelection() : null;
-                            if (sel && String(sel.toString() || '').trim()) return;
-                        } catch (err) {}
                         if (shouldIgnoreMenuToggleTarget(e.target)) return;
                         suppressNextContentClickUntil = Date.now() + 480;
+                        if (hasAnyReaderPanelOpen()) {
+                            toggleMenu({ event: e, ignoreGuard: true });
+                            return;
+                        }
                         const action = resolveTapAction(t.clientX || 0, t.clientY || 0);
                         if (action < 0) {
                             lastFlipGestureAt = Date.now();
@@ -2687,18 +2723,17 @@
                     return;
                 }
                 if (currentFlipMode === 'simulation' && !simDragState) {
-                    if (hasAnyReaderPanelOpen()) return;
                     const dx = (t.clientX || 0) - txtFlipStartX;
                     const dy = (t.clientY || 0) - txtFlipStartY;
                     const dt = Math.max(1, Date.now() - txtFlipStartAt);
                     const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
                     if (click) {
-                        try {
-                            const sel = window.getSelection ? window.getSelection() : null;
-                            if (sel && String(sel.toString() || '').trim()) return;
-                        } catch (err) {}
                         if (shouldIgnoreMenuToggleTarget(e.target)) return;
                         suppressNextContentClickUntil = Date.now() + 480;
+                        if (hasAnyReaderPanelOpen()) {
+                            toggleMenu({ event: e, ignoreGuard: true });
+                            return;
+                        }
                         const action = resolveTapAction(t.clientX || 0, t.clientY || 0);
                         if (action < 0) {
                             lastFlipGestureAt = Date.now();
@@ -2718,6 +2753,22 @@
                 if (currentFlipMode === 'simulation' && simDragState) {
                     finishSimDrag(t.clientX || 0);
                     return;
+                }
+                if (currentFlipMode === 'slide') {
+                    const dx = (t.clientX || 0) - txtFlipStartX;
+                    const dy = (t.clientY || 0) - txtFlipStartY;
+                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
+                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
+                    if (click) {
+                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
+                        suppressNextContentClickUntil = Date.now() + 480;
+                        if (hasAnyReaderPanelOpen()) {
+                            toggleMenu({ event: e, ignoreGuard: true });
+                            return;
+                        }
+                        toggleMenu({ event: e, ignoreGuard: true });
+                        return;
+                    }
                 }
                 maybeTurn(t.clientX || 0, t.clientY || 0, Date.now());
             };
@@ -2753,18 +2804,17 @@
                 txtFlipPointerId = null;
                 try { contentArea.releasePointerCapture(e.pointerId); } catch (err) {}
                 if (currentFlipMode === 'scroll') {
-                    if (hasAnyReaderPanelOpen()) return;
                     const dx = (e.clientX || 0) - txtFlipStartX;
                     const dy = (e.clientY || 0) - txtFlipStartY;
                     const dt = Math.max(1, Date.now() - txtFlipStartAt);
                     const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
                     if (click) {
-                        try {
-                            const sel = window.getSelection ? window.getSelection() : null;
-                            if (sel && String(sel.toString() || '').trim()) return;
-                        } catch (err) {}
                         if (shouldIgnoreMenuToggleTarget(e.target)) return;
                         suppressNextContentClickUntil = Date.now() + 480;
+                        if (hasAnyReaderPanelOpen()) {
+                            toggleMenu({ event: e, ignoreGuard: true });
+                            return;
+                        }
                         const action = resolveTapAction(e.clientX || 0, e.clientY || 0);
                         if (action < 0) {
                             lastFlipGestureAt = Date.now();
@@ -2802,6 +2852,22 @@
                             return;
                         }
                         suppressNextContentClickUntil = Date.now() + 480;
+                        toggleMenu({ event: e, ignoreGuard: true });
+                        return;
+                    }
+                }
+                if (currentFlipMode === 'slide') {
+                    const dx = (e.clientX || 0) - txtFlipStartX;
+                    const dy = (e.clientY || 0) - txtFlipStartY;
+                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
+                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
+                    if (click) {
+                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
+                        suppressNextContentClickUntil = Date.now() + 480;
+                        if (hasAnyReaderPanelOpen()) {
+                            toggleMenu({ event: e, ignoreGuard: true });
+                            return;
+                        }
                         toggleMenu({ event: e, ignoreGuard: true });
                         return;
                     }
@@ -3237,6 +3303,7 @@
                         }
                         await rendition.display(savedProgress ? savedProgress.cfi : undefined);
                         startProgressAutoSave(openSession);
+                        try { attachEpubInteractionHandlers(rendition, openSession); } catch (e) {}
                         
                         rendition.on('relocated', (location) => {
                             const cfi = location && location.start ? location.start.cfi : null;
@@ -4001,11 +4068,56 @@
         
         // --- Reader Features ---
         let selectionQueryText = '';
+        let selectionQueryFetchSeq = 0;
+        const selectionQueryCache = new Map();
+        let epubSelectionInfo = null;
 
         function hideSelectionQueryBtn() {
             const btn = document.getElementById('selectionQueryBtn');
             if (!btn) return;
             btn.classList.remove('active');
+        }
+
+        function clearQueryResult() {
+            const el = document.getElementById('queryResult');
+            if (!el) return;
+            el.innerHTML = '';
+        }
+
+        function setQueryResultHtml(html) {
+            const el = document.getElementById('queryResult');
+            if (!el) return;
+            el.innerHTML = html || '';
+        }
+
+        function showSelectionQueryBtnAtRect(text, rect) {
+            const btn = document.getElementById('selectionQueryBtn');
+            const panel = document.getElementById('queryPanel');
+            const readerView = document.getElementById('readerView');
+            if (!btn || !readerView) return;
+            if (panel && panel.classList.contains('active')) {
+                hideSelectionQueryBtn();
+                return;
+            }
+            if (!text || !rect || hasAnyReaderPanelOpen()) {
+                selectionQueryText = '';
+                hideSelectionQueryBtn();
+                return;
+            }
+            selectionQueryText = String(text || '').trim();
+            if (!selectionQueryText) {
+                hideSelectionQueryBtn();
+                return;
+            }
+            const rvRect = readerView.getBoundingClientRect();
+            const x = (rect.left - rvRect.left) + (rect.width || 0) / 2;
+            const y = (rect.top - rvRect.top);
+            const btnW = btn.offsetWidth || 56;
+            const left = Math.max(8, Math.min((rvRect.width || 0) - btnW - 8, x - btnW / 2));
+            const top = Math.max(8, Math.min((rvRect.height || 0) - 48, y - 42));
+            btn.style.left = `${Math.round(left)}px`;
+            btn.style.top = `${Math.round(top)}px`;
+            btn.classList.add('active');
         }
 
         function getReaderSelectionInfo() {
@@ -4033,39 +4145,150 @@
         }
 
         function updateSelectionQueryBtnFromSelection() {
-            const btn = document.getElementById('selectionQueryBtn');
             const panel = document.getElementById('queryPanel');
             const readerView = document.getElementById('readerView');
-            if (!btn || !readerView) return;
+            if (!readerView) return;
             if (panel && panel.classList.contains('active')) {
                 hideSelectionQueryBtn();
                 return;
             }
-            const info = getReaderSelectionInfo();
+            const info = getReaderSelectionInfo() || epubSelectionInfo;
             if (!info || hasAnyReaderPanelOpen()) {
                 selectionQueryText = '';
                 hideSelectionQueryBtn();
                 return;
             }
-            selectionQueryText = info.text;
-            const rvRect = readerView.getBoundingClientRect();
-            const x = (info.rect.left - rvRect.left) + (info.rect.width || 0) / 2;
-            const y = (info.rect.top - rvRect.top);
-            const btnW = btn.offsetWidth || 56;
-            const left = Math.max(8, Math.min((rvRect.width || 0) - btnW - 8, x - btnW / 2));
-            const top = Math.max(8, Math.min((rvRect.height || 0) - 48, y - 42));
-            btn.style.left = `${Math.round(left)}px`;
-            btn.style.top = `${Math.round(top)}px`;
-            btn.classList.add('active');
+            showSelectionQueryBtnAtRect(info.text, info.rect);
         }
 
         document.addEventListener('selectionchange', () => {
             try { updateSelectionQueryBtnFromSelection(); } catch (e) {}
         }, { passive: true });
 
+        function normalizeQueryText(text) {
+            const t = String(text || '').trim().replace(/\s+/g, ' ');
+            if (!t) return '';
+            if (t.length > 32) return t.slice(0, 32);
+            return t;
+        }
+
+        function buildQueryResultHtml(queryText, data) {
+            const q = escapeHtml(queryText);
+            const pinyin = data && data.pinyin ? escapeHtml(data.pinyin) : '';
+            const defs = Array.isArray(data && data.definitions) ? data.definitions : [];
+            const origin = data && data.origin ? escapeHtml(data.origin) : '';
+            const sourceUrl = data && data.sourceUrl ? String(data.sourceUrl) : '';
+            const safeUrl = sourceUrl ? escapeHtml(sourceUrl) : '';
+
+            const defItems = defs.slice(0, 10).map((d, i) => `<div class="query-result-item">${escapeHtml(`${i + 1}. ${d}`)}</div>`).join('');
+            const metaBits = [];
+            if (pinyin) metaBits.push(`拼音：${pinyin}`);
+            if (safeUrl) metaBits.push(`数据：<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">百度</a>`);
+            const meta = metaBits.length ? metaBits.join('　') : '';
+
+            let html = `<div class="query-result-title">${q}</div>`;
+            if (meta) html += `<div class="query-result-meta">${meta}</div>`;
+            if (defItems) {
+                html += `<div class="query-result-section"><div class="query-result-section-title">释义</div><div class="query-result-list">${defItems}</div></div>`;
+            } else {
+                html += `<div class="query-result-hint">未识别到释义内容，可尝试下方链接继续查询。</div>`;
+            }
+            if (origin) {
+                html += `<div class="query-result-section"><div class="query-result-section-title">来源</div><div class="query-result-item">${origin}</div></div>`;
+            }
+            return html;
+        }
+
+        function parseBaiduMobileMarkdown(markdown) {
+            const contentIdx = markdown.indexOf('Markdown Content:');
+            const body = contentIdx >= 0 ? markdown.slice(contentIdx + 'Markdown Content:'.length) : markdown;
+            const lines = body.split(/\r?\n/).map(l => String(l || '').trim()).filter(Boolean);
+
+            const toneLineRe = /^[a-zA-Zāáǎàēéěèīíǐìōóǒòūúǔùüǖǘǚǜńňǹḿm̀·\s-]+$/;
+            let pinyin = '';
+            for (const line of lines) {
+                if (!toneLineRe.test(line)) continue;
+                if (!/[a-zA-Z]/.test(line)) continue;
+                if (line.length > 32) continue;
+                pinyin = line.replace(/\s+/g, ' ').trim();
+                break;
+            }
+
+            const findLineIndex = (keys) => {
+                for (let i = 0; i < lines.length; i += 1) {
+                    const line = lines[i];
+                    for (const k of keys) {
+                        if (line.includes(k)) return i;
+                    }
+                }
+                return -1;
+            };
+
+            const defStart = findLineIndex(['释义', '解释', '基本释义', '含义']);
+            const defEnd = (() => {
+                if (defStart < 0) return -1;
+                for (let i = defStart + 1; i < lines.length; i += 1) {
+                    const l = lines[i];
+                    if (l.includes('组词') || l.includes('近义') || l.includes('反义') || l.includes('相关') || l.includes('词语') || l.includes('成语')) return i;
+                }
+                return lines.length;
+            })();
+
+            const defLines = (defStart >= 0 && defEnd > defStart) ? lines.slice(defStart + 1, defEnd) : [];
+            const defs = [];
+            for (const l of defLines) {
+                const m = /^\s*(\d+)\.\s*(.+)\s*$/.exec(l);
+                if (m && m[2]) defs.push(m[2].trim());
+            }
+            if (defs.length === 0) {
+                const combined = defLines.join(' ').replace(/\s+/g, ' ').trim();
+                if (combined) defs.push(combined);
+            }
+
+            const originStart = findLineIndex(['出处', '来源', '词源']);
+            let origin = '';
+            if (originStart >= 0) {
+                const chunk = lines.slice(originStart, Math.min(lines.length, originStart + 6)).join(' ').replace(/\s+/g, ' ').trim();
+                origin = chunk.replace(/^(出处|来源|词源)\s*[:：]?\s*/g, '').trim();
+            }
+
+            return { pinyin, definitions: defs, origin };
+        }
+
+        async function fetchSelectionExplanation(queryText) {
+            const q = normalizeQueryText(queryText);
+            if (!q) return null;
+            if (selectionQueryCache.has(q)) return selectionQueryCache.get(q);
+            const url = `https://r.jina.ai/https://m.baidu.com/s?word=${encodeURIComponent(q + ' 拼音 释义')}`;
+            const res = await fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store' });
+            const text = await res.text();
+            const data = parseBaiduMobileMarkdown(text);
+            const out = { ...data, sourceUrl: `https://hanyu.baidu.com/s?wd=${encodeURIComponent(q)}` };
+            selectionQueryCache.set(q, out);
+            return out;
+        }
+
+        async function startSelectionQueryFetch(text) {
+            const q = normalizeQueryText(text);
+            if (!q) {
+                clearQueryResult();
+                return;
+            }
+            const seq = ++selectionQueryFetchSeq;
+            setQueryResultHtml('<div class="query-result-hint">正在查询…</div>');
+            try {
+                const data = await fetchSelectionExplanation(q);
+                if (seq !== selectionQueryFetchSeq) return;
+                setQueryResultHtml(buildQueryResultHtml(q, data));
+            } catch (e) {
+                if (seq !== selectionQueryFetchSeq) return;
+                setQueryResultHtml('<div class="query-result-hint">查询失败，可使用下方链接继续查询。</div>');
+            }
+        }
+
         function openSelectionQueryPanel() {
-            const info = getReaderSelectionInfo();
-            const text = (selectionQueryText || (info ? info.text : '') || '').trim();
+            const info = getReaderSelectionInfo() || epubSelectionInfo;
+            const text = normalizeQueryText(selectionQueryText || (info ? info.text : '') || '');
             if (!text) return;
             selectionQueryText = text;
             const panelText = document.getElementById('queryPanelText');
@@ -4075,6 +4298,7 @@
             if (overlay) overlay.classList.add('active');
             if (panel) panel.classList.add('active');
             hideSelectionQueryBtn();
+            startSelectionQueryFetch(text);
         }
 
         function hideSelectionQueryPanel() {
@@ -4101,6 +4325,96 @@
             } catch (e) {
                 location.href = url;
             }
+        }
+
+        function attachEpubInteractionHandlers(renditionInstance, session) {
+            if (!renditionInstance) return;
+
+            const tryToggle = (ev) => {
+                if (session !== txtSessionId) return;
+                try {
+                    const target = ev && ev.target ? ev.target : null;
+                    if (target && typeof target.closest === 'function') {
+                        const link = target.closest('a');
+                        if (link && (link.getAttribute('href') || link.getAttribute('xlink:href'))) return;
+                    }
+                } catch (e) {}
+                toggleMenu({ event: ev, ignoreGuard: true });
+            };
+
+            try { renditionInstance.on('click', tryToggle); } catch (e) {}
+
+            try {
+                renditionInstance.on('selected', (cfiRange, contents) => {
+                    if (session !== txtSessionId) return;
+                    if (!contents || !contents.window) return;
+                    const sel = contents.window.getSelection ? contents.window.getSelection() : null;
+                    if (!sel || sel.rangeCount <= 0 || sel.isCollapsed) return;
+                    const text = normalizeQueryText(sel.toString());
+                    if (!text) return;
+                    let rect = null;
+                    try { rect = sel.getRangeAt(0).getBoundingClientRect(); } catch (e) {}
+                    if (!rect) return;
+                    const iframe = contents.iframe || (contents.document && contents.document.defaultView ? contents.document.defaultView.frameElement : null);
+                    if (!iframe || !iframe.getBoundingClientRect) return;
+                    const iframeRect = iframe.getBoundingClientRect();
+                    const mergedRect = {
+                        left: iframeRect.left + (rect.left || 0),
+                        top: iframeRect.top + (rect.top || 0),
+                        width: rect.width || 0,
+                        height: rect.height || 0
+                    };
+                    epubSelectionInfo = { text, rect: mergedRect };
+                    showSelectionQueryBtnAtRect(text, mergedRect);
+                });
+            } catch (e) {}
+
+            try {
+                renditionInstance.on('rendered', (section, contents) => {
+                    if (session !== txtSessionId) return;
+                    if (!contents || !contents.document || !contents.window) return;
+                    const doc = contents.document;
+                    const root = doc.documentElement;
+                    if (root && root.getAttribute('data-mozi-epub-bind') === '1') return;
+                    if (root) root.setAttribute('data-mozi-epub-bind', '1');
+
+                    let startX = 0;
+                    let startY = 0;
+                    let startAt = 0;
+                    doc.addEventListener('touchstart', (e) => {
+                        if (session !== txtSessionId) return;
+                        if (!e || !e.touches || !e.touches[0]) return;
+                        const t = e.touches[0];
+                        startX = t.clientX || 0;
+                        startY = t.clientY || 0;
+                        startAt = Date.now();
+                    }, { passive: true });
+
+                    doc.addEventListener('touchend', (e) => {
+                        if (session !== txtSessionId) return;
+                        if (!e || !e.changedTouches || !e.changedTouches[0]) return;
+                        const t = e.changedTouches[0];
+                        const dx = (t.clientX || 0) - startX;
+                        const dy = (t.clientY || 0) - startY;
+                        const dt = Math.max(1, Date.now() - startAt);
+                        const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
+                        if (!click) return;
+                        tryToggle(e);
+                    }, { passive: true });
+
+                    doc.addEventListener('selectionchange', () => {
+                        if (session !== txtSessionId) return;
+                        try {
+                            const sel = contents.window.getSelection ? contents.window.getSelection() : null;
+                            const txt = sel ? normalizeQueryText(sel.toString()) : '';
+                            if (!txt) {
+                                epubSelectionInfo = null;
+                                if (!hasAnyReaderPanelOpen()) hideSelectionQueryBtn();
+                            }
+                        } catch (e) {}
+                    });
+                });
+            } catch (e) {}
         }
 
         function shouldIgnoreMenuToggleTarget(target) {
@@ -4151,6 +4465,8 @@
             const moreMenu = document.getElementById('moreMenu');
             const tocPanel = document.getElementById('tocPanel');
             const tocOverlay = document.getElementById('tocOverlay');
+            const queryOverlay = document.getElementById('queryOverlay');
+            const queryPanel = document.getElementById('queryPanel');
             
             if (settings.classList.contains('active')) {
                 settings.classList.remove('active');
@@ -4164,6 +4480,10 @@
             if (tocPanel.classList.contains('active')) {
                 tocPanel.classList.remove('active');
                 tocOverlay.classList.remove('active');
+                return;
+            }
+            if ((queryOverlay && queryOverlay.classList.contains('active')) || (queryPanel && queryPanel.classList.contains('active'))) {
+                hideSelectionQueryPanel();
                 return;
             }
             
