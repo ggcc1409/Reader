@@ -53,6 +53,38 @@
 
 版本记录（按时间倒序追加）
 
+Build ID: 2026-02-04_03
+时间: 2026-02-04 16:10:00
+涉及文件: design_v14_functionality.html, problem_fix_record.txt
+改动摘要:
+- iOS 角落点按翻页区扩大：四角命中区域在 iOS 上扩大 20%，降低误触发菜单概率
+- 菜单触发区域收敛：四角只执行翻页/上下翻页；仅正文中间区域可唤起/关闭菜单（TXT/EPUB）
+- 事件冲突处理：TXT 的 document 捕获点击不再抢占菜单切换，避免与正文内部翻页点击逻辑打架
+本次回归结果（填写 PRE/POST）:
+- PRE: iOS 点击四角偶发弹出菜单；四角翻页区域偏小
+- POST: 桌面浏览器自检通过；iOS 真机 Safari/PWA 待验证
+
+Build ID: 2026-02-04_02
+时间: 2026-02-04 15:21:41
+涉及文件: design_v14_functionality.html
+改动摘要:
+- 关闭保存去重：移除关闭按钮 onpointerdown 的非 await 保存，避免与 closeBook 保存产生写入竞态导致“回退偏移”
+- 滚动惯性收敛：closeBook 保存前等待滚动稳定（适配 iOS 惯性滚动），减少“回退后上移一行”
+本次回归结果（填写 PRE/POST）:
+- PRE: 返回书架再进入，正文位置偶发上移约 1 行
+- POST: 桌面浏览器自检通过；iOS 真机 Safari/PWA 待验证
+
+Build ID: 2026-02-04_01
+时间: 2026-02-04 14:31:39
+涉及文件: design_v14_functionality.html
+改动摘要:
+- Reader 全局手势：将 touch/click 监听提升到 document 捕获阶段，避免 iOS PWA/滚动容器导致正文点按失效
+- EPUB iframe 交互：在 iframe 内补齐“轻点唤起/关闭菜单”与“左侧边缘右滑返回”识别逻辑
+- 返回进度：边缘右滑触发 closeBook，复用 closeBook 内的进度保存逻辑（TXT/EPUB）
+本次回归结果（填写 PRE/POST）:
+- PRE: iOS PWA（部分场景）正文轻点无法唤起菜单；EPUB 内左侧边缘右滑不生效
+- POST: 桌面浏览器自检 R-001~R-010 通过；iOS 真机 Safari/PWA 待验证
+
 Build ID: 2026-02-03_01
 时间: 2026-02-03
 涉及文件: design_v14_functionality.html
