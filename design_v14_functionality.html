@@ -518,12 +518,43 @@
         .reader-view.menu-visible .reader-top-bar { transform: translateY(0); opacity: 1; pointer-events: auto; }
         .reader-view.menu-visible .reader-bottom-bar { transform: translateY(0); opacity: 1; pointer-events: auto; }
 
+        .reader-interaction-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 309;
+            pointer-events: auto;
+            background-color: transparent;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .reader-interaction-zone {
+            position: absolute;
+            pointer-events: none;
+            display: none;
+        }
+        .reader-interaction-zone.corner {
+            background: rgba(0,0,0,0.1);
+        }
+        .reader-interaction-zone.menu {
+            inset: 0;
+            background: rgba(0,0,0,0.06);
+        }
+        .debug-mode .reader-interaction-zone {
+            display: block;
+        }
+        .reader-interaction-zone.corner.tl { left: 0; top: 0; width: 30%; height: 25%; }
+        .reader-interaction-zone.corner.tr { right: 0; top: 0; width: 30%; height: 25%; }
+        .reader-interaction-zone.corner.bl { left: 0; bottom: 0; width: 30%; height: 25%; }
+        .reader-interaction-zone.corner.br { right: 0; bottom: 0; width: 30%; height: 25%; }
+
         .reader-content {
             flex: 1;
+            position: relative;
+            box-sizing: border-box;
             padding: calc(56px + env(safe-area-inset-top) + 18px) 24px calc(82px + env(safe-area-inset-bottom) + 18px + var(--reader-bottom-sheet)) 24px;
             font-family: "Georgia", serif; 
             font-size: var(--reader-font-size); 
-            line-height: var(--reader-line-height);
+            line-height: 32px !important;
             background-color: var(--reader-bg);
             overflow-y: auto; -webkit-overflow-scrolling: touch;
             overflow-x: hidden;
@@ -534,6 +565,9 @@
             word-break: break-word;
             overflow-wrap: anywhere;
         }
+        .reader-content-inner { min-height: 100%; width: 100%; }
+        .mode-slide > .reader-content-inner { display: contents; }
+        .mode-sim > .reader-content-inner { display: contents; }
         .reader-content::-webkit-scrollbar { width: 0; height: 0; display: none; }
         .reader-content * { max-width: 100%; }
         .reader-content p { scroll-margin-top: 72px; }
@@ -675,10 +709,10 @@
             left: 0;
             right: 0;
             bottom: 0;
-            padding: 0 16px calc(10px + env(safe-area-inset-bottom)) 16px;
-            height: calc(30px + env(safe-area-inset-bottom));
+            padding: 0 16px env(safe-area-inset-bottom) 16px;
+            height: calc(60px + env(safe-area-inset-bottom));
             display: flex;
-            align-items: flex-end;
+            align-items: center;
             justify-content: space-between;
             color: var(--reader-hud-text);
             font-size: 13px;
@@ -1232,7 +1266,16 @@
             </div>
 
             <!-- Content -->
-            <div class="reader-content" id="readerContent"></div>
+            <div class="reader-content" id="readerContent">
+                <div class="reader-content-inner" id="readerContentInner"></div>
+                <div class="reader-interaction-layer" id="readerInteractionLayer">
+                    <div class="reader-interaction-zone menu"></div>
+                    <div class="reader-interaction-zone corner tl"></div>
+                    <div class="reader-interaction-zone corner tr"></div>
+                    <div class="reader-interaction-zone corner bl"></div>
+                    <div class="reader-interaction-zone corner br"></div>
+                </div>
+            </div>
             <div class="reader-chapter-page-indicator" id="readerChapterPageIndicator"></div>
             <div class="reader-bottom-status" id="readerBottomStatus">
                 <div class="reader-bottom-status-left" id="readerBottomPage"></div>
@@ -1376,6 +1419,9 @@
         const DB_VERSION = 2;
         const STORES = { BOOKS: 'books', PROGRESS: 'progress' };
         const debugEnabled = new URLSearchParams(location.search).get('debug') === '1' || localStorage.getItem('reader_debug') === '1';
+        const HOTZONE_CORNER_WIDTH_PCT = 0.3;
+        const HOTZONE_CORNER_HEIGHT_PCT = 0.25;
+        const LINE_HEIGHT = 32;
         let debugPanelEl = null;
         let debugPanelContentEl = null;
         let debugPanelTimer = null;
@@ -1861,6 +1907,7 @@
             renderBookshelf();
             updateAppleTouchIcon();
             try { bindReaderGlobalGestures(); } catch (e) {}
+            try { bindReaderInteractionLayer(); } catch (e) {}
             try { ensureReaderBottomStatusTimer(); } catch (e) {}
         });
 
@@ -2096,7 +2143,8 @@
         function buildTxtPagedView(mode, absHint = null) {
             if (!currentBookId || !currentTxtContent) return;
             const contentArea = document.getElementById('readerContent');
-            if (!contentArea) return;
+            const inner = document.getElementById('readerContentInner');
+            if (!contentArea || !inner) return;
             txtPagedMode = mode;
             const CHUNK_SIZE = 15000;
             const startPos = Math.max(0, parseInt(contentArea.getAttribute('data-chunk-start') || '0', 10) || 0);
@@ -2126,7 +2174,7 @@
                 else hi = mid - 1;
             }
             txtPagedIndex = Math.max(0, Math.min(txtPagedPages.length - 1, idx));
-            contentArea.innerHTML = '';
+            inner.innerHTML = '';
             if (mode === 'simulation') {
                 contentArea.onscroll = null;
                 contentArea.classList.add('mode-sim');
@@ -2141,7 +2189,7 @@
                 next.innerHTML = '';
                 surface.appendChild(next);
                 surface.appendChild(cur);
-                contentArea.appendChild(surface);
+                inner.appendChild(surface);
                 setTxtActiveFromPagedIndex();
                 schedulePersistTxtAnchorProgress('auto');
                 return;
@@ -2153,7 +2201,7 @@
                 page.className = 'paged-page';
                 page.setAttribute('data-page-index', String(p));
                 page.innerHTML = txtPagedPages[p];
-                contentArea.appendChild(page);
+                inner.appendChild(page);
             }
             const pageWidth = contentArea.clientWidth || 1;
             contentArea.scrollLeft = txtPagedIndex * pageWidth;
@@ -2368,9 +2416,12 @@
         let currentBook = null;
         let currentTxtContent = null;
         let currentTxtToc = [];
+        let currentEpubToc = [];
         let currentBookId = null;
         let lastTxtProgress = null;
         let lastEpubProgress = null;
+        let lastEpubRelocatedHref = null;
+        let epubHrefToTocIndex = null;
         let txtScrollHandler = null;
         let txtTouchHandler = null;
         let txtPointerHandler = null;
@@ -2380,6 +2431,7 @@
         let closeInFlight = null;
         let isAppendingTxt = false;
         let currentTxtTocActiveIndex = -1;
+        let currentEpubTocActiveIndex = -1;
         let txtSessionId = 0;
         const TXT_PAGE_SIZE = 3000;
         let txtCharsPerPageCache = { perPage: TXT_PAGE_SIZE, w: 0, h: 0, fontSize: 0, lineHeightPx: 0, padL: 0, padR: 0, padT: 0, padB: 0 };
@@ -2548,23 +2600,134 @@
             }
         }
 
-        function getReaderCornerTapAction(contentArea, clientX, clientY) {
+        let readerInteractionLayerBound = false;
+        let readerInteractionLastTouchAt = 0;
+        let readerInteractionScrollSyncBound = false;
+
+        function clamp01(n) {
+            const v = Number(n);
+            if (!Number.isFinite(v)) return 0;
+            return Math.max(0, Math.min(1, v));
+        }
+
+        function getPctFromClientRect(rect, clientX, clientY) {
+            if (!rect || !rect.width || !rect.height) return null;
+            const xPct = clamp01((((clientX || 0) - rect.left) / rect.width));
+            const yPct = clamp01((((clientY || 0) - rect.top) / rect.height));
+            return { xPct, yPct };
+        }
+
+        function getReaderIntentFromPct(xPct, yPct) {
+            const inCornerW = xPct <= HOTZONE_CORNER_WIDTH_PCT || xPct >= (1 - HOTZONE_CORNER_WIDTH_PCT);
+            const inCornerH = yPct <= HOTZONE_CORNER_HEIGHT_PCT || yPct >= (1 - HOTZONE_CORNER_HEIGHT_PCT);
+            if (inCornerW && inCornerH) return yPct <= HOTZONE_CORNER_HEIGHT_PCT ? 'prev' : 'next';
+            return 'menu';
+        }
+
+        function getReaderInteractionIntentFromClientXY(layerRect, clientX, clientY) {
+            const pct = getPctFromClientRect(layerRect, clientX, clientY);
+            if (!pct) return null;
+            return getReaderIntentFromPct(pct.xPct, pct.yPct);
+        }
+
+        function getReaderInteractionIntent(clientX, clientY) {
+            const layer = document.getElementById('readerInteractionLayer');
+            if (!layer) return null;
+            const rect = layer.getBoundingClientRect ? layer.getBoundingClientRect() : null;
+            return getReaderInteractionIntentFromClientXY(rect, clientX, clientY);
+        }
+
+        function getContentPaddingTopPx(contentArea) {
             if (!contentArea) return 0;
-            const rect = contentArea.getBoundingClientRect ? contentArea.getBoundingClientRect() : null;
-            const w = rect ? (rect.width || contentArea.clientWidth || 1) : (contentArea.clientWidth || 1);
-            const h = rect ? (rect.height || contentArea.clientHeight || 1) : (contentArea.clientHeight || 1);
-            const x = rect ? ((clientX || 0) - rect.left) : (clientX || 0);
-            const y = rect ? ((clientY || 0) - rect.top) : (clientY || 0);
-            const factor = isIOSLike() ? 1.2 : 1.0;
-            const cornerW = Math.min(w * 0.42, w * 0.30 * factor);
-            const cornerH = Math.min(h * 0.34, h * 0.24 * factor);
-            const inLeft = x <= cornerW;
-            const inRight = x >= (w - cornerW);
-            const inTop = y <= cornerH;
-            const inBottom = y >= (h - cornerH);
-            if (inTop && (inLeft || inRight)) return -1;
-            if (inBottom && (inLeft || inRight)) return 1;
-            return 0;
+            try {
+                const cs = window.getComputedStyle(contentArea);
+                const padTop = parseFloat(cs.paddingTop || '0');
+                return Number.isFinite(padTop) ? Math.max(0, padTop) : 0;
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        function getScrollLineIndex(scrollTop, paddingTopPx, lineHeightPx) {
+            const s = Number(scrollTop);
+            const p = Number(paddingTopPx);
+            const lh = Number(lineHeightPx);
+            if (!Number.isFinite(s) || !Number.isFinite(p) || !Number.isFinite(lh) || lh <= 0) return 0;
+            return Math.max(0, Math.floor(Math.max(0, s - p) / lh));
+        }
+
+        function getScrollTopFromLineIndex(lineIndex, paddingTopPx, lineHeightPx) {
+            const idx = Number(lineIndex);
+            const p = Number(paddingTopPx);
+            const lh = Number(lineHeightPx);
+            if (!Number.isFinite(idx) || !Number.isFinite(p) || !Number.isFinite(lh) || lh <= 0) return 0;
+            return Math.max(0, Math.floor(idx) * lh + p);
+        }
+
+        function syncReaderInteractionLayerPosition() {
+            const content = document.getElementById('readerContent');
+            const layer = document.getElementById('readerInteractionLayer');
+            if (!content || !layer) return;
+            const x = content.scrollLeft || 0;
+            const y = content.scrollTop || 0;
+            layer.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        }
+
+        function dispatchReaderInteractionIntent(intent, e) {
+            if (!intent) return;
+            if (e && e.stopPropagation) e.stopPropagation();
+
+            if (intent === 'menu') {
+                toggleMenu({ event: e, ignoreGuard: true });
+                return;
+            }
+
+            const readerView = document.getElementById('readerView');
+            if (readerView && readerView.classList.contains('menu-visible')) return;
+            if (hasAnyReaderPanelOpen()) return;
+
+            lastFlipGestureAt = Date.now();
+            if (intent === 'prev') {
+                if (currentTxtContent && (currentFlipMode === 'slide' || currentFlipMode === 'simulation')) turnTxtPaged(-1);
+                else scrollPage(-1);
+                return;
+            }
+            if (intent === 'next') {
+                if (currentTxtContent && (currentFlipMode === 'slide' || currentFlipMode === 'simulation')) turnTxtPaged(1);
+                else scrollPage(1);
+            }
+        }
+
+        function bindReaderInteractionLayer() {
+            if (readerInteractionLayerBound) return;
+            const layer = document.getElementById('readerInteractionLayer');
+            const content = document.getElementById('readerContent');
+            if (!layer || !content) return;
+            readerInteractionLayerBound = true;
+
+            const onTouchEnd = (e) => {
+                readerInteractionLastTouchAt = Date.now();
+                if (!e || !e.changedTouches || !e.changedTouches[0]) return;
+                const t = e.changedTouches[0];
+                const intent = getReaderInteractionIntent(t.clientX || 0, t.clientY || 0);
+                dispatchReaderInteractionIntent(intent, e);
+            };
+            const onClick = (e) => {
+                if (!e) return;
+                if ((Date.now() - readerInteractionLastTouchAt) < 650) return;
+                const intent = getReaderInteractionIntent(e.clientX || 0, e.clientY || 0);
+                dispatchReaderInteractionIntent(intent, e);
+            };
+            layer.addEventListener('touchend', onTouchEnd, { passive: true });
+            layer.addEventListener('click', onClick, { passive: true });
+
+            if (!readerInteractionScrollSyncBound) {
+                readerInteractionScrollSyncBound = true;
+                const sync = () => syncReaderInteractionLayerPosition();
+                content.addEventListener('scroll', sync, { passive: true });
+                window.addEventListener('resize', sync, { passive: true });
+                setTimeout(sync, 0);
+            }
         }
 
         let readerBottomClockTimer = null;
@@ -2657,7 +2820,6 @@
             let tapStartY = 0;
             let tapStartAt = 0;
             let tapMoved = false;
-            let tapCandidate = false;
 
             let edgeStartX = 0;
             let edgeStartY = 0;
@@ -2667,12 +2829,6 @@
 
             const isReaderActive = () => {
                 try { return reader.classList.contains('active') && !reader.classList.contains('closing'); } catch (e) { return false; }
-            };
-
-            const isInReaderContent = (target) => {
-                const content = document.getElementById('readerContent');
-                if (!content || !target) return false;
-                try { return content.contains(target); } catch (e) { return false; }
             };
 
             const isSwipeBack = (dx, dy, dt) => {
@@ -2691,7 +2847,6 @@
                 tapStartY = t.clientY || 0;
                 tapStartAt = Date.now();
                 tapMoved = false;
-                tapCandidate = isInReaderContent(e.target) && !shouldIgnoreMenuToggleTarget(e.target);
 
                 edgeStartX = tapStartX;
                 edgeStartY = tapStartY;
@@ -2736,47 +2891,6 @@
                         return;
                     }
                 }
-
-                if (!tapCandidate || tapMoved) return;
-                const dx = endX - tapStartX;
-                const dy = endY - tapStartY;
-                const dt = Math.max(1, now - tapStartAt);
-                if (Math.abs(dx) > 12 || Math.abs(dy) > 12 || dt > 650) return;
-                if (currentTxtContent) return;
-                const content = document.getElementById('readerContent');
-                const action = getReaderCornerTapAction(content, endX, endY);
-                if (action < 0) {
-                    lastFlipGestureAt = Date.now();
-                    scrollPage(-1);
-                    return;
-                }
-                if (action > 0) {
-                    lastFlipGestureAt = Date.now();
-                    scrollPage(1);
-                    return;
-                }
-                toggleMenu({ event: e, ignoreGuard: true });
-            }, { capture: true, passive: true });
-
-            document.addEventListener('click', (e) => {
-                if (!isReaderActive()) return;
-                if ((Date.now() - lastTouchEndAt) < 650) return;
-                if (!isInReaderContent(e.target)) return;
-                if (shouldIgnoreMenuToggleTarget(e.target)) return;
-                if (currentTxtContent) return;
-                const content = document.getElementById('readerContent');
-                const action = getReaderCornerTapAction(content, e.clientX || 0, e.clientY || 0);
-                if (action < 0) {
-                    lastFlipGestureAt = Date.now();
-                    scrollPage(-1);
-                    return;
-                }
-                if (action > 0) {
-                    lastFlipGestureAt = Date.now();
-                    scrollPage(1);
-                    return;
-                }
-                toggleMenu({ event: e, ignoreGuard: true });
             }, { capture: true, passive: true });
         }
 
@@ -2808,16 +2922,16 @@
         }
 
         function detachTxtFlipGestureHandlers() {
-            const contentArea = document.getElementById('readerContent');
-            if (!contentArea) return;
-            if (txtFlipTouchStartHandler) contentArea.removeEventListener('touchstart', txtFlipTouchStartHandler);
-            if (txtFlipTouchEndHandler) contentArea.removeEventListener('touchend', txtFlipTouchEndHandler);
-            if (txtFlipTouchMoveHandler) contentArea.removeEventListener('touchmove', txtFlipTouchMoveHandler);
-            if (txtFlipTouchCancelHandler) contentArea.removeEventListener('touchcancel', txtFlipTouchCancelHandler);
-            if (txtFlipPointerDownHandler) contentArea.removeEventListener('pointerdown', txtFlipPointerDownHandler);
-            if (txtFlipPointerMoveHandler) contentArea.removeEventListener('pointermove', txtFlipPointerMoveHandler);
-            if (txtFlipPointerUpHandler) contentArea.removeEventListener('pointerup', txtFlipPointerUpHandler);
-            if (txtFlipPointerCancelHandler) contentArea.removeEventListener('pointercancel', txtFlipPointerCancelHandler);
+            const layer = document.getElementById('readerInteractionLayer');
+            if (!layer) return;
+            if (txtFlipTouchStartHandler) layer.removeEventListener('touchstart', txtFlipTouchStartHandler);
+            if (txtFlipTouchEndHandler) layer.removeEventListener('touchend', txtFlipTouchEndHandler);
+            if (txtFlipTouchMoveHandler) layer.removeEventListener('touchmove', txtFlipTouchMoveHandler);
+            if (txtFlipTouchCancelHandler) layer.removeEventListener('touchcancel', txtFlipTouchCancelHandler);
+            if (txtFlipPointerDownHandler) layer.removeEventListener('pointerdown', txtFlipPointerDownHandler);
+            if (txtFlipPointerMoveHandler) layer.removeEventListener('pointermove', txtFlipPointerMoveHandler);
+            if (txtFlipPointerUpHandler) layer.removeEventListener('pointerup', txtFlipPointerUpHandler);
+            if (txtFlipPointerCancelHandler) layer.removeEventListener('pointercancel', txtFlipPointerCancelHandler);
             txtFlipTouchStartHandler = null;
             txtFlipTouchEndHandler = null;
             txtFlipTouchMoveHandler = null;
@@ -2832,15 +2946,13 @@
 
         function attachTxtFlipGestureHandlers(session = txtSessionId) {
             const contentArea = document.getElementById('readerContent');
-            if (!contentArea) return;
+            const layer = document.getElementById('readerInteractionLayer');
+            if (!contentArea || !layer) return;
             detachTxtFlipGestureHandlers();
             const begin = (x, y, t) => {
                 txtFlipStartX = x;
                 txtFlipStartY = y;
                 txtFlipStartAt = t;
-            };
-            const resolveTapAction = (clientX, clientY) => {
-                return getReaderCornerTapAction(contentArea, clientX, clientY);
             };
             const maybeTurn = (endX, endY, endT) => {
                 if (session !== txtSessionId) return;
@@ -2983,92 +3095,9 @@
                 if (session !== txtSessionId) return;
                 if (!e || !e.changedTouches || !e.changedTouches[0]) return;
                 const t = e.changedTouches[0];
-                if (currentFlipMode === 'scroll') {
-                    const dx = (t.clientX || 0) - txtFlipStartX;
-                    const dy = (t.clientY || 0) - txtFlipStartY;
-                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
-                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                    if (click) {
-                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
-                        suppressNextContentClickUntil = Date.now() + 480;
-                        if (hasAnyReaderPanelOpen()) {
-                            toggleMenu({ event: e, ignoreGuard: true });
-                            return;
-                        }
-                        const action = resolveTapAction(t.clientX || 0, t.clientY || 0);
-                        if (action < 0) {
-                            lastFlipGestureAt = Date.now();
-                            scrollPage(-1);
-                            return;
-                        }
-                        if (action > 0) {
-                            lastFlipGestureAt = Date.now();
-                            scrollPage(1);
-                            return;
-                        }
-                        toggleMenu({ event: e, ignoreGuard: true });
-                        return;
-                    }
-                    return;
-                }
-                if (currentFlipMode === 'simulation' && !simDragState) {
-                    const dx = (t.clientX || 0) - txtFlipStartX;
-                    const dy = (t.clientY || 0) - txtFlipStartY;
-                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
-                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                    if (click) {
-                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
-                        suppressNextContentClickUntil = Date.now() + 480;
-                        if (hasAnyReaderPanelOpen()) {
-                            toggleMenu({ event: e, ignoreGuard: true });
-                            return;
-                        }
-                        const action = resolveTapAction(t.clientX || 0, t.clientY || 0);
-                        if (action < 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(-1);
-                            return;
-                        }
-                        if (action > 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(1);
-                            return;
-                        }
-                        toggleMenu({ event: e, ignoreGuard: true });
-                        return;
-                    }
-                    return;
-                }
                 if (currentFlipMode === 'simulation' && simDragState) {
                     finishSimDrag(t.clientX || 0);
                     return;
-                }
-                if (currentFlipMode === 'slide') {
-                    const dx = (t.clientX || 0) - txtFlipStartX;
-                    const dy = (t.clientY || 0) - txtFlipStartY;
-                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
-                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                    if (click) {
-                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
-                        suppressNextContentClickUntil = Date.now() + 480;
-                        if (hasAnyReaderPanelOpen()) {
-                            toggleMenu({ event: e, ignoreGuard: true });
-                            return;
-                        }
-                        const action = resolveTapAction(t.clientX || 0, t.clientY || 0);
-                        if (action < 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(-1);
-                            return;
-                        }
-                        if (action > 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(1);
-                            return;
-                        }
-                        toggleMenu({ event: e, ignoreGuard: true });
-                        return;
-                    }
                 }
                 maybeTurn(t.clientX || 0, t.clientY || 0, Date.now());
             };
@@ -3102,86 +3131,10 @@
                 if (!e) return;
                 if (txtFlipPointerId !== null && e.pointerId !== txtFlipPointerId) return;
                 txtFlipPointerId = null;
-                try { contentArea.releasePointerCapture(e.pointerId); } catch (err) {}
-                if (currentFlipMode === 'scroll') {
-                    const dx = (e.clientX || 0) - txtFlipStartX;
-                    const dy = (e.clientY || 0) - txtFlipStartY;
-                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
-                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                    if (click) {
-                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
-                        suppressNextContentClickUntil = Date.now() + 480;
-                        if (hasAnyReaderPanelOpen()) {
-                            toggleMenu({ event: e, ignoreGuard: true });
-                            return;
-                        }
-                        const action = resolveTapAction(e.clientX || 0, e.clientY || 0);
-                        if (action < 0) {
-                            lastFlipGestureAt = Date.now();
-                            scrollPage(-1);
-                            return;
-                        }
-                        if (action > 0) {
-                            lastFlipGestureAt = Date.now();
-                            scrollPage(1);
-                            return;
-                        }
-                        toggleMenu({ event: e, ignoreGuard: true });
-                        return;
-                    }
-                }
+                try { layer.releasePointerCapture(e.pointerId); } catch (err) {}
                 if (currentFlipMode === 'simulation' && simDragState) {
                     finishSimDrag(e.clientX || 0);
                     return;
-                }
-                if (currentFlipMode === 'simulation') {
-                    const dx = (e.clientX || 0) - txtFlipStartX;
-                    const dy = (e.clientY || 0) - txtFlipStartY;
-                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
-                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                    if (click) {
-                        const action = resolveTapAction(e.clientX || 0, e.clientY || 0);
-                        if (action < 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(-1);
-                            return;
-                        }
-                        if (action > 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(1);
-                            return;
-                        }
-                        suppressNextContentClickUntil = Date.now() + 480;
-                        toggleMenu({ event: e, ignoreGuard: true });
-                        return;
-                    }
-                }
-                if (currentFlipMode === 'slide') {
-                    const dx = (e.clientX || 0) - txtFlipStartX;
-                    const dy = (e.clientY || 0) - txtFlipStartY;
-                    const dt = Math.max(1, Date.now() - txtFlipStartAt);
-                    const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                    if (click) {
-                        if (shouldIgnoreMenuToggleTarget(e.target)) return;
-                        suppressNextContentClickUntil = Date.now() + 480;
-                        if (hasAnyReaderPanelOpen()) {
-                            toggleMenu({ event: e, ignoreGuard: true });
-                            return;
-                        }
-                        const action = resolveTapAction(e.clientX || 0, e.clientY || 0);
-                        if (action < 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(-1);
-                            return;
-                        }
-                        if (action > 0) {
-                            lastFlipGestureAt = Date.now();
-                            turnTxtPaged(1);
-                            return;
-                        }
-                        toggleMenu({ event: e, ignoreGuard: true });
-                        return;
-                    }
                 }
                 maybeTurn(e.clientX || 0, e.clientY || 0, Date.now());
             };
@@ -3189,14 +3142,14 @@
                 txtFlipPointerId = null;
                 cleanupSimDragState();
             };
-            contentArea.addEventListener('touchstart', txtFlipTouchStartHandler, { passive: true });
-            contentArea.addEventListener('touchmove', txtFlipTouchMoveHandler, { passive: true });
-            contentArea.addEventListener('touchend', txtFlipTouchEndHandler, { passive: true });
-            contentArea.addEventListener('touchcancel', txtFlipTouchCancelHandler, { passive: true });
-            contentArea.addEventListener('pointerdown', txtFlipPointerDownHandler, { passive: true });
-            contentArea.addEventListener('pointermove', txtFlipPointerMoveHandler, { passive: true });
-            contentArea.addEventListener('pointerup', txtFlipPointerUpHandler, { passive: true });
-            contentArea.addEventListener('pointercancel', txtFlipPointerCancelHandler, { passive: true });
+            layer.addEventListener('touchstart', txtFlipTouchStartHandler, { passive: true });
+            layer.addEventListener('touchmove', txtFlipTouchMoveHandler, { passive: true });
+            layer.addEventListener('touchend', txtFlipTouchEndHandler, { passive: true });
+            layer.addEventListener('touchcancel', txtFlipTouchCancelHandler, { passive: true });
+            layer.addEventListener('pointerdown', txtFlipPointerDownHandler, { passive: true });
+            layer.addEventListener('pointermove', txtFlipPointerMoveHandler, { passive: true });
+            layer.addEventListener('pointerup', txtFlipPointerUpHandler, { passive: true });
+            layer.addEventListener('pointercancel', txtFlipPointerCancelHandler, { passive: true });
         }
 
         function escapeHtml(s) {
@@ -3312,6 +3265,8 @@
             const isSlide = currentFlipMode === 'slide';
             const scrollPos = contentArea ? (isSlide ? contentArea.scrollLeft : contentArea.scrollTop) : 0;
             const nearEdge = contentArea ? (scrollPos <= 80) : false;
+            const padTop = (!isSlide && contentArea) ? getContentPaddingTopPx(contentArea) : 0;
+            const lineIndex = (!isSlide && contentArea) ? getScrollLineIndex(scrollPos, padTop, LINE_HEIGHT) : null;
             let anchorOffset = 0;
             if (!isSlide && contentArea && txtActiveAnchorId) {
                 try {
@@ -3324,7 +3279,7 @@
                     }
                 } catch (e) {}
             }
-            lastTxtProgress = { absolutePos: absPos, percent, chunkStart, ratio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset };
+            lastTxtProgress = { absolutePos: absPos, percent, chunkStart, ratio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, lineIndex };
             setActiveTxtTocIndex(chapterIndex);
             updatePageIndicatorByTxtPos(absPos);
             debugLog('saveTxtProgressFromView', { reason, data: lastTxtProgress });
@@ -3334,7 +3289,7 @@
                 percent,
                 scrollPos,
                 chunkStart,
-                { kind: 'txt', ratio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, reason, nearEdge, flipMode: currentFlipMode }
+                { kind: 'txt', ratio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, lineIndex, reason, nearEdge, flipMode: currentFlipMode }
             );
         }
 
@@ -3388,6 +3343,7 @@
                     if (!nextId || nextId === txtActiveAnchorId) return;
                     txtActiveAnchorId = nextId;
                     txtActiveAbsPos = abs;
+                    updateActiveTxtTocByPos(abs);
                     schedulePersistTxtAnchorProgress('auto');
                 }, {
                     root: contentArea,
@@ -3471,6 +3427,61 @@
             currentTxtTocActiveIndex = i;
         }
 
+        function normalizeEpubHref(href) {
+            const s = String(href || '');
+            const noHash = s.split('#')[0];
+            return noHash.replace(/^\.\//, '');
+        }
+
+        function rebuildEpubTocHrefIndex() {
+            epubHrefToTocIndex = new Map();
+            if (!currentEpubToc || currentEpubToc.length === 0) return;
+            for (let i = 0; i < currentEpubToc.length; i += 1) {
+                const href = currentEpubToc[i] ? currentEpubToc[i].href : null;
+                const key = normalizeEpubHref(href);
+                if (key) epubHrefToTocIndex.set(key, i);
+            }
+        }
+
+        function setActiveEpubTocIndex(idx) {
+            if (!Number.isFinite(idx)) return;
+            const i = Math.max(-1, Math.min((currentEpubToc ? currentEpubToc.length : 0) - 1, Math.floor(idx)));
+            if (i === currentEpubTocActiveIndex) return;
+            const tocList = document.getElementById('tocList');
+            if (tocList) {
+                const prev = tocList.querySelector('.toc-item.active');
+                if (prev) prev.classList.remove('active');
+                const next = tocList.querySelector(`.toc-item[data-epub-index="${i}"]`);
+                if (next) next.classList.add('active');
+            }
+            currentEpubTocActiveIndex = i;
+        }
+
+        function updateActiveEpubTocByHref(href) {
+            const key = normalizeEpubHref(href);
+            if (!key) return;
+            const idx = epubHrefToTocIndex && epubHrefToTocIndex.has(key) ? epubHrefToTocIndex.get(key) : null;
+            if (!Number.isFinite(idx)) return;
+            setActiveEpubTocIndex(idx);
+        }
+
+        function updateActiveEpubTocByLocation(location) {
+            const href = location && location.start ? (location.start.href || location.start.url || location.start.path) : null;
+            if (!href) return;
+            lastEpubRelocatedHref = href;
+            updateActiveEpubTocByHref(href);
+        }
+
+        function scrollTocActiveIntoView() {
+            const tocList = document.getElementById('tocList');
+            if (!tocList) return;
+            const active = tocList.querySelector('.toc-item.active')
+                || (currentTxtTocActiveIndex >= 0 ? tocList.querySelector(`.toc-item[data-toc-index="${currentTxtTocActiveIndex}"]`) : null)
+                || (currentEpubTocActiveIndex >= 0 ? tocList.querySelector(`.toc-item[data-epub-index="${currentEpubTocActiveIndex}"]`) : null);
+            if (!active || !active.scrollIntoView) return;
+            active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+
         function updatePageIndicatorByTxtPos(absolutePos) {
             const el = document.getElementById('readerPageIndicator');
             const chapEl = document.getElementById('readerChapterPageIndicator');
@@ -3550,6 +3561,12 @@
             currentBookId = id; // Set ID
             lastTxtProgress = null;
             lastEpubProgress = null;
+            lastEpubRelocatedHref = null;
+            epubHrefToTocIndex = null;
+            currentTxtToc = [];
+            currentEpubToc = [];
+            currentTxtTocActiveIndex = -1;
+            currentEpubTocActiveIndex = -1;
             isRestoringTxt = true;
             isClosingReader = false;
             teardownTxtObservers();
@@ -3559,7 +3576,8 @@
             // Prepare Reader View
             document.getElementById('readerTitle').innerText = bookData.title;
             const contentArea = document.getElementById('readerContent');
-            contentArea.onclick = (e) => handleReaderContentClick(e);
+            const inner = document.getElementById('readerContentInner');
+            try { bindReaderInteractionLayer(); } catch (e) {}
             try { ensureSettingsPanelMountPoint(); } catch (e) {}
             if (txtScrollHandler && txtScrollHandler.cancel) txtScrollHandler.cancel();
             if (txtTouchHandler && txtTouchHandler.cancel) txtTouchHandler.cancel();
@@ -3568,7 +3586,7 @@
             if (txtScrollHandler) contentArea.removeEventListener('scroll', txtScrollHandler);
             if (txtTouchHandler) contentArea.removeEventListener('touchend', txtTouchHandler);
             if (txtPointerHandler) contentArea.removeEventListener('pointerup', txtPointerHandler);
-            contentArea.innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-tertiary);">正在加载...</div>';
+            if (inner) inner.innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-tertiary);">正在加载...</div>';
             document.getElementById('readerView').classList.remove('closing');
             document.getElementById('readerView').classList.remove('menu-visible');
             document.getElementById('settingsPanel').classList.remove('active');
@@ -3605,9 +3623,9 @@
                 if (bookData.format === 'EPUB') {
                     // ... existing EPUB logic ...
                     try {
-                        contentArea.innerHTML = '';
+                        if (inner) inner.innerHTML = '';
                         currentBook = ePub(bookData.fileBlob);
-                        rendition = currentBook.renderTo("readerContent", {
+                        rendition = currentBook.renderTo("readerContentInner", {
                             width: "100%",
                             height: "100%",
                             flow: "scrolled", // Always start scrolled for now
@@ -3631,22 +3649,26 @@
                             const percent = Number.isFinite(rawPercent) ? Math.floor(rawPercent * 100) : 0;
                             lastEpubProgress = { cfi, percent };
                             storage.saveProgress(id, cfi, percent);
+                            try { updateActiveEpubTocByLocation(location); } catch (e) {}
                             updatePageIndicatorByTxtPos(NaN);
                         });
 
                         // Generate TOC
                         const navigation = await currentBook.loaded.navigation;
+                        currentEpubToc = navigation && navigation.toc ? navigation.toc : [];
+                        rebuildEpubTocHrefIndex();
                         const tocSubtitleEl = document.querySelector('#tocPanel .toc-subtitle');
                         if (tocSubtitleEl) tocSubtitleEl.textContent = `共 ${navigation && navigation.toc ? navigation.toc.length : 0} 章`;
                         const tocList = document.getElementById('tocList');
-                        tocList.innerHTML = navigation.toc.map(chapter => `
-                            <div class="toc-item" onclick="event.stopPropagation(); rendition.display('${chapter.href}'); closeTOC();">
+                        tocList.innerHTML = currentEpubToc.map((chapter, idx) => `
+                            <div class="toc-item" data-epub-index="${idx}" onclick="event.stopPropagation(); setActiveEpubTocIndex(${idx}); rendition.display('${chapter.href}'); closeTOC();">
                                 <span>${chapter.label}</span>
                             </div>
                         `).join('');
+                        if (lastEpubRelocatedHref) updateActiveEpubTocByHref(lastEpubRelocatedHref);
                     } catch (err) {
                         console.error('EPUB render error:', err);
-                        contentArea.innerHTML = '<div style="padding:20px; color:red;">解析失败，请检查文件格式</div>';
+                        if (inner) inner.innerHTML = '<div style="padding:20px; color:red;">解析失败，请检查文件格式</div>';
                     }
                 } else {
                     // Optimized TXT rendering
@@ -3679,6 +3701,9 @@
                         const savedAnchorOffset = savedProgress && savedProgress.anchorOffset !== undefined && savedProgress.anchorOffset !== null
                             ? Number(savedProgress.anchorOffset)
                             : NaN;
+                        const savedLineIndex = savedProgress && savedProgress.lineIndex !== undefined && savedProgress.lineIndex !== null
+                            ? parseInt(savedProgress.lineIndex)
+                            : NaN;
                         const ratio = savedProgress && savedProgress.ratio !== undefined && savedProgress.ratio !== null
                             ? parseFloat(savedProgress.ratio)
                             : NaN;
@@ -3693,16 +3718,50 @@
                         if (Number.isFinite(savedAnchorAbs)) absolutePos = Math.max(0, Math.min(currentTxtContent.length - 1, savedAnchorAbs));
                         let anchorId = savedAnchorId;
                         if (!anchorId) anchorId = txtAnchorIdForAbsPos(currentBookId, absolutePos);
+                        updateActiveTxtTocByPos(absolutePos);
                         const CHUNK_SIZE = 15000;
-                        const chunkStart = Math.max(0, Math.floor(absolutePos / CHUNK_SIZE) * CHUNK_SIZE);
+                        const maxChunkStart = Math.max(0, Math.floor(Math.max(0, currentTxtContent.length - 1) / CHUNK_SIZE) * CHUNK_SIZE);
+                        const savedChunkStart = savedProgress && savedProgress.chunkStart !== undefined && savedProgress.chunkStart !== null
+                            ? parseInt(savedProgress.chunkStart)
+                            : NaN;
+                        const derivedChunkStart = Math.max(0, Math.floor(absolutePos / CHUNK_SIZE) * CHUNK_SIZE);
+                        const chunkStart = (Number.isFinite(savedLineIndex) && Number.isFinite(savedChunkStart))
+                            ? Math.max(0, Math.min(maxChunkStart, savedChunkStart))
+                            : Math.max(0, Math.min(maxChunkStart, derivedChunkStart));
                         debugLog('txt open: restore plan', { absolutePos, posFromCfi, posFromRatio, chunkStart, ratio });
                         currentFlipMode = desiredFlipMode;
                         renderTxtChunk(chunkStart);
                         const fontsReadyPromise = waitForFontsReady();
                         let restoreAttempts = 0;
+                        let didLineRestore = false;
                         const tryRestore = () => {
                             if (openSession !== txtSessionId) return;
+                            if (!contentArea || (contentArea.clientHeight || 0) <= 0) {
+                                restoreAttempts += 1;
+                                if (restoreAttempts < 12) setTimeout(tryRestore, 60);
+                                return;
+                            }
                             observeTxtContainer(openSession);
+                            if (Number.isFinite(savedLineIndex)) {
+                                if (!didLineRestore) {
+                                    didLineRestore = true;
+                                    setTimeout(() => {
+                                        if (openSession !== txtSessionId) return;
+                                        const padTop = getContentPaddingTopPx(contentArea);
+                                        const targetTop = getScrollTopFromLineIndex(savedLineIndex, padTop, LINE_HEIGHT);
+                                        const maxScroll = Math.max(0, (contentArea.scrollHeight || 0) - (contentArea.clientHeight || 0));
+                                        contentArea.scrollTop = Math.max(0, Math.min(maxScroll, targetTop));
+                                        isRestoringTxt = false;
+                                        updateActiveTxtTocByPos(Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : absolutePos);
+                                        startProgressAutoSave(openSession);
+                                        setTimeout(() => {
+                                            if (openSession !== txtSessionId) return;
+                                            schedulePersistTxtAnchorProgress('auto');
+                                        }, 0);
+                                    }, 100);
+                                }
+                                return;
+                            }
                             let target = null;
                             if (anchorId) {
                                 const el = document.getElementById(anchorId);
@@ -3765,7 +3824,7 @@
 
                     } catch(e) {
                          console.error(e);
-                         contentArea.innerHTML = '<div style="padding:20px; color:red;">文件读取失败</div>';
+                         if (inner) inner.innerHTML = '<div style="padding:20px; color:red;">文件读取失败</div>';
                     }
                 }
             }, 600);
@@ -3877,9 +3936,14 @@
                 const rect = contentArea.getBoundingClientRect();
                 const x = rect.left + rect.width * 0.2;
                 const y = rect.top + rect.height * 0.3;
-                const hit = document.elementFromPoint(x, y);
-                const p = hit ? hit.closest('p[data-pos]') : null;
-                if (p && p.getAttribute('data-anchor') !== '1') target = p;
+                const stack = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+                for (const node of stack) {
+                    const p = node && node.closest ? node.closest('p[data-pos]') : null;
+                    if (p && p.getAttribute('data-anchor') !== '1') {
+                        target = p;
+                        break;
+                    }
+                }
             } else {
                 const anchorTop = contentArea.scrollTop + (maxScroll > 0 ? Math.floor(contentArea.clientHeight * 0.25) : 1);
                 for (const p of paragraphs) {
@@ -3943,6 +4007,8 @@
         function renderTxtChunk(startPos) {
             const CHUNK_SIZE = 15000;
             const contentArea = document.getElementById('readerContent');
+            const inner = document.getElementById('readerContentInner');
+            if (!contentArea || !inner) return;
             const chunk = currentTxtContent.slice(startPos, startPos + CHUNK_SIZE);
             
             contentArea.setAttribute('data-chunk-start', startPos);
@@ -3963,32 +4029,18 @@
                 return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" style="margin-bottom:16px; text-align:justify;">${escapeHtml(display)}</p>` : '';
             }).join('');
             
-            contentArea.innerHTML = html;
+            inner.innerHTML = html;
             contentArea.scrollTop = 0;
             contentArea.scrollLeft = 0;
             let anchorRef = null;
             const topSentinel = document.createElement('div');
             topSentinel.setAttribute('data-txt-top-sentinel', '1');
             topSentinel.style.height = '1px';
-            contentArea.insertAdjacentElement('afterbegin', topSentinel);
+            inner.insertAdjacentElement('afterbegin', topSentinel);
             const sentinel = document.createElement('div');
             sentinel.setAttribute('data-txt-sentinel', '1');
             sentinel.style.height = '1px';
-            contentArea.appendChild(sentinel);
-            
-            // Add "Prev" button if not at start
-            if (startPos > 0) {
-                const prevBtn = document.createElement('div');
-                prevBtn.style.cssText = "padding: 20px; text-align: center; color: var(--accent-purple); cursor: pointer; font-weight: bold;";
-                prevBtn.innerText = "上一页";
-                prevBtn.onclick = (e) => {
-                    if (e && e.stopPropagation) e.stopPropagation();
-                    const prevStart = Math.max(0, startPos - CHUNK_SIZE);
-                    renderTxtChunk(prevStart);
-                };
-                topSentinel.insertAdjacentElement('afterend', prevBtn);
-                anchorRef = prevBtn;
-            }
+            inner.appendChild(sentinel);
         
             const anchor = document.createElement('p');
             anchor.setAttribute('data-pos', '0');
@@ -3998,6 +4050,7 @@
             else topSentinel.insertAdjacentElement('afterend', anchor);
             observeTxtContainer();
             attachTxtScrollHandler();
+            try { syncReaderInteractionLayerPosition(); } catch (e) {}
         }
         
         
@@ -4005,6 +4058,8 @@
              const CHUNK_SIZE = 15000;
              if (startPos >= currentTxtContent.length) return;
              const container = document.getElementById('readerContent');
+             const inner = document.getElementById('readerContentInner');
+             if (!container || !inner) return;
              
              const chunk = currentTxtContent.slice(startPos, startPos + CHUNK_SIZE);
              let pos = 0;
@@ -4018,7 +4073,7 @@
              }).join('');
              
              const range = document.createRange();
-             range.selectNodeContents(container);
+             range.selectNodeContents(inner);
              const fragment = range.createContextualFragment(html);
              const combined = document.createDocumentFragment();
              const anchor = document.createElement('p');
@@ -4027,11 +4082,11 @@
              anchor.style.cssText = 'margin:0;height:0;';
              combined.appendChild(anchor);
              combined.appendChild(fragment);
-             const sentinel = container.querySelector('[data-txt-sentinel="1"]');
+             const sentinel = inner.querySelector('[data-txt-sentinel="1"]');
              if (sentinel) {
-                 container.insertBefore(combined, sentinel);
+                 inner.insertBefore(combined, sentinel);
              } else {
-                 container.appendChild(combined);
+                 inner.appendChild(combined);
              }
              
              const currentLength = parseInt(container.getAttribute('data-render-length') || '0');
@@ -4649,36 +4704,6 @@
         function attachEpubInteractionHandlers(renditionInstance, session) {
             if (!renditionInstance) return;
 
-            const tryToggle = (ev) => {
-                if (session !== txtSessionId) return;
-                try {
-                    const target = ev && ev.target ? ev.target : null;
-                    if (target && typeof target.closest === 'function') {
-                        const link = target.closest('a');
-                        if (link && (link.getAttribute('href') || link.getAttribute('xlink:href'))) return;
-                    }
-                } catch (e) {}
-                if (hasAnyReaderPanelOpen()) {
-                    toggleMenu({ event: ev, ignoreGuard: true });
-                    return;
-                }
-                const content = document.getElementById('readerContent');
-                const action = getReaderCornerTapAction(content, ev ? (ev.clientX || 0) : 0, ev ? (ev.clientY || 0) : 0);
-                if (action < 0) {
-                    lastFlipGestureAt = Date.now();
-                    scrollPage(-1);
-                    return;
-                }
-                if (action > 0) {
-                    lastFlipGestureAt = Date.now();
-                    scrollPage(1);
-                    return;
-                }
-                toggleMenu({ event: ev, ignoreGuard: true });
-            };
-
-            try { renditionInstance.on('click', tryToggle); } catch (e) {}
-
             try {
                 renditionInstance.on('selected', (cfiRange, contents) => {
                     if (session !== txtSessionId) return;
@@ -4716,7 +4741,6 @@
                     let startX = 0;
                     let startY = 0;
                     let startAt = 0;
-                    let moved = false;
                     let edgeCandidate = false;
                     let edgeMoved = false;
                     const isSwipeBack = (dx, dy, dt) => {
@@ -4733,7 +4757,6 @@
                         startX = t.clientX || 0;
                         startY = t.clientY || 0;
                         startAt = Date.now();
-                        moved = false;
                         edgeCandidate = startX <= 16;
                         edgeMoved = false;
                     }, { passive: true });
@@ -4744,7 +4767,6 @@
                         const t = e.touches[0];
                         const dx = (t.clientX || 0) - startX;
                         const dy = (t.clientY || 0) - startY;
-                        if (!moved && (Math.abs(dx) > 12 || Math.abs(dy) > 12)) moved = true;
                         if (edgeCandidate && !edgeMoved && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) edgeMoved = true;
                     }, { passive: true });
 
@@ -4764,10 +4786,6 @@
                             closeBook();
                             return;
                         }
-                        if (moved) return;
-                        const click = Math.abs(dx) <= 10 && Math.abs(dy) <= 10 && dt <= 550;
-                        if (!click) return;
-                        tryToggle(e);
                     }, { passive: true });
 
                     doc.addEventListener('selectionchange', () => {
@@ -4814,11 +4832,6 @@
             if (topBar && topBar.contains(target)) return true;
             if (bottomBar && bottomBar.contains(target)) return true;
             return false;
-        }
-
-        function handleReaderContentClick(e) {
-            if (Date.now() < suppressNextContentClickUntil) return;
-            toggleMenu({ event: e });
         }
 
         function toggleMenu(options = null) {
@@ -4986,9 +4999,11 @@
             if (willOpen && reader) reader.classList.add('menu-visible');
             panel.classList.toggle('active');
             overlay.classList.toggle('active');
-            if (willOpen && currentTxtTocActiveIndex >= 0) {
-                const active = document.querySelector(`.toc-item[data-toc-index="${currentTxtTocActiveIndex}"]`);
-                if (active) active.scrollIntoView({ block: 'center' });
+            if (willOpen) {
+                setTimeout(() => {
+                    if (!panel.classList.contains('active')) return;
+                    scrollTocActiveIntoView();
+                }, 0);
             }
         }
         
