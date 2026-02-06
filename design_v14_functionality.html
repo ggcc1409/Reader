@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -8,10 +8,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="MOZI">
-    <link rel="apple-touch-icon" id="appleTouchIcon" sizes="180x180" href="./icon/mozi_icon_180.png?v=2">
-    <link rel="apple-touch-icon-precomposed" id="appleTouchIconPre" sizes="180x180" href="./icon/mozi_icon_180.png?v=2">
+    <link rel="apple-touch-icon" id="appleTouchIcon" sizes="180x180" href="/mozi_icon_180.png">
+    <link rel="apple-touch-icon-precomposed" id="appleTouchIconPre" sizes="180x180" href="/mozi_icon_180.png">
     <link rel="icon" type="image/svg+xml" href="./icon.svg?v=9">
     <meta name="theme-color" content="#141218">
+    <link rel="manifest" href="/manifest.json">
 
     <!-- Libraries -->
     <script src="./libs/jszip.min.js"></script>
@@ -386,8 +387,8 @@
                         <div class="toc-header-row">
                             <div class="toc-title">目录</div>
                             <div class="toc-actions">
-                                <button class="toc-action-btn" onclick="event.stopPropagation(); scrollTocToTop()" aria-label="置顶">↑</button>
-                                <button class="toc-action-btn" onclick="event.stopPropagation(); scrollTocToBottom()" aria-label="置底">↓</button>
+                                <button class="toc-action-btn" onclick="event.stopPropagation(); scrollTocActiveIntoView()">定位</button>
+                                <button class="toc-action-btn" id="tocOrderBtn" onclick="event.stopPropagation(); toggleTocOrder()">正序</button>
                             </div>
                         </div>
                         <div class="toc-subtitle">共 12 章</div>
@@ -677,6 +678,69 @@
             constructor() { this.dbPromise = this.initDB(); }
             progressKey(bookId) { return `reader_progress_${bookId}`; }
             legacyProgressKey(bookId) { return `reader_progress_cache_${bookId}`; }
+            booksListKey() { return 'my_books'; }
+            readLocalBooksList() {
+                try {
+                    const raw = localStorage.getItem(this.booksListKey());
+                    const parsed = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (e) {
+                    return [];
+                }
+            }
+            writeLocalBooksList(list) {
+                try {
+                    if (!Array.isArray(list)) return;
+                    localStorage.setItem(this.booksListKey(), JSON.stringify(list));
+                } catch (e) {}
+            }
+            toLocalBookMeta(book) {
+                try {
+                    if (!book || typeof book !== 'object') return null;
+                    const meta = {
+                        id: book.id,
+                        title: book.title,
+                        author: book.author,
+                        cover: book.cover,
+                        addedDate: book.addedDate,
+                        format: book.format
+                    };
+                    return meta && meta.id ? meta : null;
+                } catch (e) {
+                    return null;
+                }
+            }
+            upsertLocalBookMeta(bookMeta) {
+                try {
+                    if (!bookMeta || !bookMeta.id) return;
+                    const list = this.readLocalBooksList();
+                    const next = [];
+                    let inserted = false;
+                    for (const item of list) {
+                        if (item && item.id === bookMeta.id) {
+                            next.push({ ...(item || {}), ...bookMeta });
+                            inserted = true;
+                        } else {
+                            next.push(item);
+                        }
+                    }
+                    if (!inserted) next.push(bookMeta);
+                    this.writeLocalBooksList(next);
+                } catch (e) {}
+            }
+            updateLocalBookProgress(bookId, progressPercent, lastReadIndex = null) {
+                try {
+                    const list = this.readLocalBooksList();
+                    if (!Array.isArray(list) || list.length === 0) return;
+                    const next = list.map((item) => {
+                        if (!item || item.id !== bookId) return item;
+                        const patch = { progress: progressPercent, lastReadTime: Date.now() };
+                        if (Number.isFinite(Number(lastReadIndex))) patch.lastReadIndex = Number(lastReadIndex);
+                        return { ...item, ...patch };
+                    });
+                    this.writeLocalBooksList(next);
+                } catch (e) {}
+            }
             initDB() {
                 return new Promise((resolve, reject) => {
                     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -695,11 +759,15 @@
             async getDB() { return this.dbPromise; }
             async addBook(book) {
                 const db = await this.getDB();
-                return new Promise((resolve) => {
+                await new Promise((resolve) => {
                     const tx = db.transaction(STORES.BOOKS, 'readwrite');
                     tx.objectStore(STORES.BOOKS).put(book);
                     tx.oncomplete = () => resolve();
                 });
+                try {
+                    const meta = this.toLocalBookMeta(book);
+                    if (meta) this.upsertLocalBookMeta(meta);
+                } catch (e) {}
             }
             async getAllBooks() {
                 const db = await this.getDB();
@@ -721,6 +789,12 @@
                 try {
                     localStorage.removeItem(this.progressKey(id));
                     localStorage.removeItem(this.legacyProgressKey(id));
+                } catch (e) {}
+                try {
+                    const list = this.readLocalBooksList();
+                    if (Array.isArray(list) && list.length > 0) {
+                        this.writeLocalBooksList(list.filter(item => !item || item.id !== id));
+                    }
                 } catch (e) {}
                 const db = await this.getDB();
                 return new Promise((resolve) => {
@@ -749,6 +823,14 @@
                 try {
                     localStorage.setItem(this.progressKey(bookId), JSON.stringify({ bookId, cfi, percentage, scrollTop, chunkStart, timestamp: Date.now(), ...(extra || {}) }));
                     try { localStorage.removeItem(this.legacyProgressKey(bookId)); } catch (e) {}
+                } catch (e) {}
+                try {
+                    const percentNum = Number(percentage);
+                    if (Number.isFinite(percentNum)) {
+                        const progressPercent = Math.max(0, Math.min(100, Math.round(percentNum)));
+                        const lastReadIndex = extra && extra.chapterIndex !== undefined ? extra.chapterIndex : null;
+                        this.updateLocalBookProgress(bookId, progressPercent, lastReadIndex);
+                    }
                 } catch (e) {}
                 const db = await this.getDB();
                 return new Promise((resolve) => {
@@ -829,6 +911,7 @@
             // Update Tab Bar
             document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + tabName).classList.add('active');
+            try { if (tabName === 'bookshelf') renderBookshelf(); } catch (e) {}
         }
 
         // --- Import Logic ---
@@ -888,9 +971,7 @@
                  return;
              }
 
-             const isGridView = container.classList.contains('grid-view');
-             
-             const bookItems = await Promise.all(books.map(async (book) => {
+             const cardResults = await Promise.all(books.map(async (book) => {
                  const progressData = await storage.getProgress(book.id);
                  const progress = progressData
                     ? (
@@ -898,7 +979,18 @@
                         : (progressData.ratio !== undefined && progressData.ratio !== null ? Math.max(1, Math.round(parseFloat(progressData.ratio) * 100)) : 0)
                     )
                     : 0;
-                 return `
+                 const meta = {
+                     id: book.id,
+                     title: book.title,
+                     author: book.author,
+                     cover: book.cover,
+                     addedDate: book.addedDate,
+                     format: book.format,
+                     progress,
+                     lastReadIndex: progressData && progressData.chapterIndex !== undefined ? progressData.chapterIndex : null,
+                     lastReadTime: progressData && progressData.timestamp ? progressData.timestamp : null
+                 };
+                 const html = `
                      <div class="book-card" onclick="openBookFromId('${book.id}')">
                          ${book.cover 
                              ? `<div class="book-cover" style="background-image: url('${book.cover}');"></div>`
@@ -912,15 +1004,17 @@
                                  <span class="progress-text">${progress}%</span>
                              </div>
                              <div class="book-stats">
-                                 <span>${(book.fileBlob.size / 1024 / 1024).toFixed(2)} MB</span>
+                                 <span>${(((book.fileBlob && book.fileBlob.size) ? book.fileBlob.size : 0) / 1024 / 1024).toFixed(2)} MB</span>
                                  <button class="edit-btn" onclick="event.stopPropagation(); deleteBook('${book.id}')">删除</button>
                              </div>
                          </div>
                      </div>
                  `;
+                 return { html, meta };
              }));
              
-             container.innerHTML = bookItems.join('');
+             container.innerHTML = cardResults.map(r => r.html).join('');
+             try { localStorage.setItem('my_books', JSON.stringify(cardResults.map(r => r.meta))); } catch (e) {}
          }
 
         async function deleteBook(id) {
@@ -2440,14 +2534,135 @@
                 || (queryPanel && queryPanel.classList.contains('active'));
         }
 
+        let tocIsReverse = false;
+        let currentTocKind = null;
+        let tocScrollTimer = null;
+
+        function updateTocOrderButtonLabel() {
+            const btn = document.getElementById('tocOrderBtn');
+            if (!btn) return;
+            btn.textContent = tocIsReverse ? '倒序' : '正序';
+        }
+
+        function setTocScrolling(active) {
+            const tocList = document.getElementById('tocList');
+            if (!tocList) return;
+            if (active) tocList.classList.add('scrolling');
+            else tocList.classList.remove('scrolling');
+        }
+
+        function armTocScrollFade() {
+            setTocScrolling(true);
+            if (tocScrollTimer) {
+                try { clearTimeout(tocScrollTimer); } catch (e) {}
+            }
+            tocScrollTimer = setTimeout(() => setTocScrolling(false), 3000);
+        }
+
+        function onTocListScroll() {
+            armTocScrollFade();
+        }
+
+        function bindTocListSmartScroll() {
+            const tocList = document.getElementById('tocList');
+            if (!tocList) return;
+            if (tocList.dataset && tocList.dataset.smartScrollBound === '1') return;
+            tocList.addEventListener('scroll', onTocListScroll, { passive: true });
+            if (tocList.dataset) tocList.dataset.smartScrollBound = '1';
+        }
+
+        function getTxtChapterWordCountByIndex(idx) {
+            if (!currentTxtToc || currentTxtToc.length === 0) return 0;
+            if (!currentTxtContent) return 0;
+            const i = Math.max(0, Math.min(currentTxtToc.length - 1, Math.floor(idx)));
+            const curPos = currentTxtToc[i] && Number.isFinite(Number(currentTxtToc[i].position)) ? Number(currentTxtToc[i].position) : 0;
+            const nextPos = (i + 1 < currentTxtToc.length) && currentTxtToc[i + 1] && Number.isFinite(Number(currentTxtToc[i + 1].position))
+                ? Number(currentTxtToc[i + 1].position)
+                : currentTxtContent.length;
+            return Math.max(0, Math.floor(nextPos - curPos));
+        }
+
+        function getEpubChapterWordCount(chapter) {
+            if (!chapter) return 0;
+            const wc = chapter.wordCount;
+            if (Number.isFinite(Number(wc))) return Math.max(0, Math.floor(Number(wc)));
+            const content = chapter.content;
+            if (content && typeof content.length === 'number') return Math.max(0, Math.floor(content.length));
+            return 0;
+        }
+
+        function renderTocList() {
+            const tocList = document.getElementById('tocList');
+            if (!tocList) return;
+            bindTocListSmartScroll();
+            const tocSubtitleEl = document.querySelector('#tocPanel .toc-subtitle');
+            if (currentTocKind === 'epub') {
+                const chapters = Array.isArray(currentEpubToc) ? currentEpubToc : [];
+                if (tocSubtitleEl) tocSubtitleEl.textContent = `共 ${chapters.length} 章`;
+                if (chapters.length === 0) {
+                    tocList.innerHTML = '<div class="reader-message reader-message--pad-20">暂无目录</div>';
+                    return;
+                }
+                const displayedChapters = tocIsReverse ? [...chapters].reverse() : chapters;
+                tocList.innerHTML = displayedChapters.map((chapter) => {
+                    const originalIndex = Number.isFinite(Number(chapter && chapter._index)) ? Number(chapter._index) : 0;
+                    const href = String(chapter && chapter.href ? chapter.href : '').replace(/'/g, "\\'");
+                    const label = String(chapter && chapter.label ? chapter.label : '');
+                    const words = getEpubChapterWordCount(chapter);
+                    return `
+                            <div class="toc-item" data-epub-index="${originalIndex}" onclick="event.stopPropagation(); handleEpubTocClick(${originalIndex}, '${href}')">
+                                <span>${label}</span>
+                                <span class="toc-item-words">${words}字</span>
+                            </div>
+                        `;
+                }).join('');
+                if (Number.isFinite(currentEpubTocActiveIndex) && currentEpubTocActiveIndex >= 0) setActiveEpubTocIndex(currentEpubTocActiveIndex);
+                return;
+            }
+            const chapters = Array.isArray(currentTxtToc) ? currentTxtToc : [];
+            if (tocSubtitleEl) tocSubtitleEl.textContent = `共 ${chapters.length} 章`;
+            if (chapters.length === 0) {
+                tocList.innerHTML = '<div class="reader-message reader-message--pad-20">暂无目录</div>';
+                return;
+            }
+            const displayedChapters = tocIsReverse ? [...chapters].reverse() : chapters;
+            tocList.innerHTML = displayedChapters.map((item) => {
+                const originalIndex = Number.isFinite(Number(item && item._index)) ? Number(item._index) : 0;
+                const pos = item && Number.isFinite(Number(item.position)) ? Number(item.position) : 0;
+                const label = String(item && item.label ? item.label : '');
+                const words = (item && Number.isFinite(Number(item.wordCount))) ? Math.max(0, Math.floor(Number(item.wordCount))) : getTxtChapterWordCountByIndex(originalIndex);
+                return `
+                                <div class="toc-item" data-toc-index="${originalIndex}" onclick="event.stopPropagation(); handleTxtTocClick(${pos}, ${originalIndex})">
+                                    <span>${label}</span>
+                                    <span class="toc-item-words">${words}字</span>
+                                </div>
+                            `;
+            }).join('');
+            if (Number.isFinite(currentTxtTocActiveIndex) && currentTxtTocActiveIndex >= 0) setActiveTxtTocIndex(currentTxtTocActiveIndex);
+        }
+
+        function toggleTocOrder() {
+            tocIsReverse = !tocIsReverse;
+            updateTocOrderButtonLabel();
+            renderTocList();
+            const tocList = document.getElementById('tocList');
+            if (tocList) tocList.scrollTop = 0;
+        }
+
         function setActiveTxtTocIndex(idx) {
             if (!Number.isFinite(idx)) return;
             const i = Math.max(-1, Math.min((currentTxtToc ? currentTxtToc.length : 0) - 1, Math.floor(idx)));
-            if (i === currentTxtTocActiveIndex) return;
             const tocList = document.getElementById('tocList');
             if (tocList) {
                 const prev = tocList.querySelector('.toc-item.active');
-                if (prev) prev.classList.remove('active');
+                if (prev) {
+                    const prevIdx = prev.getAttribute('data-toc-index');
+                    if (Number.isFinite(Number(prevIdx)) && Number(prevIdx) === i) {
+                        currentTxtTocActiveIndex = i;
+                        return;
+                    }
+                    prev.classList.remove('active');
+                }
                 const next = tocList.querySelector(`.toc-item[data-toc-index="${i}"]`);
                 if (next) next.classList.add('active');
             }
@@ -2473,11 +2688,17 @@
         function setActiveEpubTocIndex(idx) {
             if (!Number.isFinite(idx)) return;
             const i = Math.max(-1, Math.min((currentEpubToc ? currentEpubToc.length : 0) - 1, Math.floor(idx)));
-            if (i === currentEpubTocActiveIndex) return;
             const tocList = document.getElementById('tocList');
             if (tocList) {
                 const prev = tocList.querySelector('.toc-item.active');
-                if (prev) prev.classList.remove('active');
+                if (prev) {
+                    const prevIdx = prev.getAttribute('data-epub-index');
+                    if (Number.isFinite(Number(prevIdx)) && Number(prevIdx) === i) {
+                        currentEpubTocActiveIndex = i;
+                        return;
+                    }
+                    prev.classList.remove('active');
+                }
                 const next = tocList.querySelector(`.toc-item[data-epub-index="${i}"]`);
                 if (next) next.classList.add('active');
             }
@@ -2598,6 +2819,9 @@
             }
             const openSession = ++txtSessionId;
             currentBookId = id; // Set ID
+            tocIsReverse = false;
+            currentTocKind = null;
+            updateTocOrderButtonLabel();
             lastTxtProgress = null;
             lastEpubProgress = null;
             lastEpubRelocatedHref = null;
@@ -2694,16 +2918,10 @@
 
                         // Generate TOC
                         const navigation = await currentBook.loaded.navigation;
-                        currentEpubToc = navigation && navigation.toc ? navigation.toc : [];
+                        currentEpubToc = (navigation && navigation.toc ? navigation.toc : []).map((c, i) => ({ ...(c || {}), _index: i }));
+                        currentTocKind = 'epub';
                         rebuildEpubTocHrefIndex();
-                        const tocSubtitleEl = document.querySelector('#tocPanel .toc-subtitle');
-                        if (tocSubtitleEl) tocSubtitleEl.textContent = `共 ${navigation && navigation.toc ? navigation.toc.length : 0} 章`;
-                        const tocList = document.getElementById('tocList');
-                        tocList.innerHTML = currentEpubToc.map((chapter, idx) => `
-                            <div class="toc-item" data-epub-index="${idx}" onclick="event.stopPropagation(); handleEpubTocClick(${idx}, '${String(chapter && chapter.href ? chapter.href : '').replace(/'/g, "\\'")}')">
-                                <span>${chapter.label}</span>
-                            </div>
-                        `).join('');
+                        renderTocList();
                         if (lastEpubRelocatedHref) updateActiveEpubTocByHref(lastEpubRelocatedHref);
                     } catch (err) {
                         console.error('EPUB render error:', err);
@@ -2715,21 +2933,11 @@
                         const text = await parseTxt(bookData.fileBlob);
                         if (openSession !== txtSessionId) return;
                         currentTxtContent = text;
-                        currentTxtToc = parseTxtToc(text);
+                        currentTxtToc = parseTxtToc(text).map((it, i) => ({ ...(it || {}), _index: i }));
+                        currentTocKind = 'txt';
                         
                         // Render TOC
-                        const tocSubtitleEl = document.querySelector('#tocPanel .toc-subtitle');
-                        if (tocSubtitleEl) tocSubtitleEl.textContent = `共 ${currentTxtToc.length} 章`;
-                        const tocList = document.getElementById('tocList');
-                        if (currentTxtToc.length > 0) {
-                            tocList.innerHTML = currentTxtToc.map((item, idx) => `
-                                <div class="toc-item" data-toc-index="${idx}" onclick="event.stopPropagation(); handleTxtTocClick(${item.position}, ${idx})">
-                                    <span>${item.label}</span>
-                                </div>
-                            `).join('');
-                        } else {
-                             tocList.innerHTML = '<div class="reader-message reader-message--pad-20">暂无目录</div>';
-                        }
+                        renderTocList();
                         
                         isRestoringTxt = true;
                         const savedProgress = await storage.getProgress(id);
@@ -3512,6 +3720,10 @@
                     readerViewEl.classList.remove('active');
                     readerViewEl.classList.remove('closing');
                     lockBodyScroll(false);
+                    try {
+                        const shelfView = document.getElementById('view-bookshelf');
+                        if (!shelfView || shelfView.classList.contains('active')) await renderBookshelf();
+                    } catch (e) {}
                     
                     if (rendition) {
                         rendition.destroy();
@@ -4135,6 +4347,8 @@
             if (willOpen) {
                 setTimeout(() => {
                     if (!panel.classList.contains('active')) return;
+                    bindTocListSmartScroll();
+                    armTocScrollFade();
                     scrollTocActiveIntoView();
                 }, 0);
             }

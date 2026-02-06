@@ -802,19 +802,28 @@
         
         /* Table of Contents (Slide Over) */
         .toc-panel {
-            position: absolute; top: 0; left: 0; bottom: 0; width: 85%;
-            height: 100%;
-            background: var(--reader-menu-bg); color: var(--reader-menu-text);
-            z-index: 330; transform: translateX(-100%);
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: calc(82px + env(safe-area-inset-bottom));
+            top: auto;
+            width: 100%;
+            height: 80vh;
+            border-radius: 20px 20px 0 0;
+            transform: translateY(120%);
             transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-            box-shadow: 5px 0 20px rgba(0,0,0,0.2);
-            padding: 0; display: flex; flex-direction: column;
-            padding-top: env(safe-area-inset-top);
+            z-index: 200;
+            background: var(--reader-menu-bg);
+            color: var(--reader-menu-text);
+            display: flex;
+            flex-direction: column;
             overscroll-behavior: none;
             touch-action: pan-y;
             overflow: hidden;
         }
-        .toc-panel.active { transform: translateX(0); }
+        .toc-panel.active {
+            transform: translateY(0);
+        }
 
         .toc-scroll {
             display: flex;
@@ -840,7 +849,7 @@
         .toc-subtitle { font-size: 14px; opacity: 0.7; margin-top: 4px; }
         .toc-actions { display: inline-flex; align-items: center; gap: 8px; }
         .toc-action-btn {
-            width: 32px; height: 32px;
+            min-width: 44px; height: 32px;
             border-radius: 10px;
             border: 1px solid rgba(128,128,128,0.22);
             background: rgba(128,128,128,0.10);
@@ -848,10 +857,12 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 0;
+            padding: 0 10px;
             line-height: 1;
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
+            font-size: 13px;
+            font-weight: 700;
         }
         .toc-action-btn:active { opacity: 0.65; }
         
@@ -860,18 +871,33 @@
             overflow-y: auto;
             min-height: 0;
             -webkit-overflow-scrolling: touch;
-            padding: 0 24px 24px 24px;
+            padding: 0 24px 40px 24px;
+        }
+        .toc-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        .toc-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toc-list::-webkit-scrollbar-thumb {
+            background-color: transparent;
+            border-radius: 3px;
+            transition: background-color 0.3s ease;
+        }
+        .toc-list.scrolling::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.3);
         }
         .toc-item { 
             padding: 20px 0; border-bottom: 1px solid rgba(128,128,128,0.1); 
             font-size: 16px; cursor: pointer; display: flex; justify-content: space-between;
         }
+        .toc-item-words { font-size: 12px; color: #888; flex-shrink: 0; margin-left: 12px; }
         .toc-item:active { opacity: 0.5; }
         .toc-item.active { color: var(--accent-purple); font-weight: 600; }
 
         .toc-overlay {
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5); z-index: 325;
+            background: rgba(0,0,0,0.5); z-index: 190;
             opacity: 0; visibility: hidden; transition: opacity 0.3s;
         }
         .toc-overlay.active { opacity: 1; visibility: visible; }
