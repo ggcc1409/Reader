@@ -57,6 +57,10 @@
             padding: 0;
         }
 
+        body, #root, .reader-content {
+            transition: background-color 0.3s ease, color 0.3s ease !important;
+        }
+
         input,
         textarea,
         [contenteditable="true"],
@@ -561,7 +565,6 @@
             overflow-wrap: anywhere;
         }
         .reader-content-inner { min-height: 100%; width: 100%; }
-        .mode-slide > .reader-content-inner { display: contents; }
         .mode-sim > .reader-content-inner { display: contents; }
         .reader-content::-webkit-scrollbar { width: 0; height: 0; display: none; }
         .reader-content * { max-width: 100%; }
@@ -577,6 +580,11 @@
         
         /* Flip Mode Styles */
         .mode-scroll { overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
+        .reader-content.scroll {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            touch-action: pan-y !important;
+        }
         .flip-segment {
             position: relative;
             background: rgba(128,128,128,0.14);
@@ -612,31 +620,81 @@
             transition: opacity 160ms ease;
         }
         .flip-option.active { opacity: 1; font-weight: 600; }
-        .mode-slide { 
-            overflow-x: auto; 
-            overflow-y: hidden;
-            height: 100%;
-            padding: 0;
+        .reader-mode-segment {
+            position: relative;
+            background: rgba(128,128,128,0.18);
+            border-radius: 12px;
+            padding: 4px;
             display: flex;
-            scroll-snap-type: x mandatory;
-            scroll-snap-stop: normal;
-            -webkit-overflow-scrolling: touch;
-            touch-action: pan-x;
+            gap: 0;
+            user-select: none;
+            -webkit-user-select: none;
         }
-        .mode-slide .paged-page { position: relative; }
-        .mode-slide .paged-page::after {
-            content: "";
+        .reader-mode-indicator {
             position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            width: 1px;
-            background: rgba(0,0,0,0.08);
-            pointer-events: none;
+            top: 4px;
+            bottom: 4px;
+            left: 4px;
+            width: calc((100% - 8px) / 3);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 10px 26px rgba(0,0,0,0.16);
+            transform: translateX(0%);
+            transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .reader-mode-option {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            text-align: center;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            opacity: 0.72;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            transition: opacity 160ms ease;
+        }
+        .reader-mode-option.active { opacity: 1; font-weight: 600; color: #333333 !important; }
+        .reader-mode-option--disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .reader-content.slide {
+            height: 100vh !important;
+            width: 100vw !important;
+            box-sizing: border-box;
+            column-width: 100vw;
+            column-gap: 120px !important;
+            column-fill: auto;
+            overflow-x: scroll !important;
+            overflow-y: hidden !important;
+            touch-action: pan-x !important;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            transform: translateZ(0);
+            will-change: scroll-position;
+            padding: 0 !important;
+        }
+        .reader-content.slide .reader-content-inner {
+            height: 100%;
+            column-fill: auto;
+            display: contents;
+        }
+        .reader-content.slide p {
+            padding: 0 24px;
+            margin-top: 56px;
+            margin-bottom: 20px;
+            break-inside: avoid;
+            scroll-snap-align: start;
+        }
+        .reader-content.slide .reader-interaction-layer {
+            display: none;
         }
         .mode-sim {
             overflow: hidden;
             height: 100%;
+            padding: 0;
             padding: 0;
             position: relative;
             touch-action: pan-x;
