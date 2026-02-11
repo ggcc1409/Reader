@@ -13,6 +13,14 @@
 </head>
 <body>
     <script>
+        if ('serviceWorker' in navigator) {
+            try {
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                    if (!regs || !regs.length) return;
+                    return Promise.all(regs.map((r) => (r ? r.unregister() : false)));
+                }).catch(() => {});
+            } catch (e) {}
+        }
         location.replace('design_v14_functionality.html');
     </script>
 </body>

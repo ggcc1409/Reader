@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -416,6 +416,14 @@
         if ('scrollRestoration' in history) {
             try { history.scrollRestoration = 'manual'; } catch (e) {}
         }
+        if ('serviceWorker' in navigator) {
+            try {
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                    if (!regs || !regs.length) return;
+                    return Promise.all(regs.map((r) => (r ? r.unregister() : false)));
+                }).catch(() => {});
+            } catch (e) {}
+        }
 
         function updateFrameScale() {
             try {
@@ -455,7 +463,17 @@
         const DB_NAME = 'ReaderAppDB';
         const DB_VERSION = 2;
         const STORES = { BOOKS: 'books', PROGRESS: 'progress' };
-        const debugEnabled = new URLSearchParams(location.search).get('debug') === '1' || localStorage.getItem('reader_debug') === '1';
+        function safeGetStorage(key) {
+            try { return localStorage.getItem(key); } catch (e) { return null; }
+        }
+        const isStandalonePwa = (() => {
+            try {
+                if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+            } catch (e) {}
+            try { if (window.navigator && window.navigator.standalone) return true; } catch (e) {}
+            return false;
+        })();
+        const debugEnabled = new URLSearchParams(location.search).get('debug') === '1' || (!isStandalonePwa && safeGetStorage('reader_debug') === '1');
         const HOTZONE_CORNER_WIDTH_PCT = 0.3;
         const HOTZONE_CORNER_HEIGHT_PCT = 0.25;
         const LINE_HEIGHT = 32;
@@ -495,8 +513,16 @@
         try { ensureSettingsPanelMountPoint(); } catch (e) {}
 
         function toggleReaderDebug() {
-            const next = localStorage.getItem('reader_debug') === '1' ? '0' : '1';
-            localStorage.setItem('reader_debug', next);
+            if (isStandalonePwa) {
+                const url = new URL(location.href);
+                const isOn = url.searchParams.get('debug') === '1';
+                if (isOn) url.searchParams.delete('debug');
+                else url.searchParams.set('debug', '1');
+                location.href = url.toString();
+                return;
+            }
+            const next = safeGetStorage('reader_debug') === '1' ? '0' : '1';
+            try { localStorage.setItem('reader_debug', next); } catch (e) {}
             location.reload();
         }
 
@@ -1232,6 +1258,16 @@
             else contentArea.scrollTop = Math.max(0, Math.min(maxScroll, r * maxScroll));
         }
 
+        function snapSlideToPage(behavior = 'auto') {
+            const content = document.getElementById('readerContent');
+            if (!content) return;
+            if (currentFlipMode !== 'slide') return;
+            const step = getSlidePageStepPx(content);
+            const nextLeft = Math.round((content.scrollLeft || 0) / step) * step;
+            if (Math.abs(nextLeft - content.scrollLeft) < 2) return;
+            content.scrollTo({ left: nextLeft, behavior: behavior === 'smooth' ? 'smooth' : 'auto' });
+        }
+
         function setFlipMode(mode) {
             const contentArea = document.getElementById('readerContent');
             const prevMode = normalizeReaderMode(currentFlipMode);
@@ -1258,8 +1294,13 @@
                 contentArea.classList.remove('reader-content-slide');
                 if (currentFlipMode !== 'simulation') contentArea.classList.remove('mode-sim');
                 if (currentFlipMode === 'slide') {
-                    setTimeout(() => applyProgressRatioToContent('slide'), 0);
+                    contentArea.scrollTop = 0;
+                    setTimeout(() => {
+                        applyProgressRatioToContent('slide');
+                        snapSlideToPage('auto');
+                    }, 0);
                 } else if (currentFlipMode === 'scroll') {
+                    contentArea.scrollLeft = 0;
                     setTimeout(() => applyProgressRatioToContent('scroll'), 0);
                 }
             }
@@ -1303,11 +1344,35 @@
             const charsPerPage = Math.max(200, charsPerLine * Math.max(6, linesPerPage));
             const pages = [];
             const pageAbs = [];
+            const chapterBreaks = [];
+            const chapterAtOffset = new Map();
+            if (Array.isArray(currentTxtToc) && currentTxtToc.length > 0) {
+                const chunkEndAbs = startPos + chunk.length;
+                for (let i = 0; i < currentTxtToc.length; i += 1) {
+                    const pos = currentTxtToc[i] && Number.isFinite(Number(currentTxtToc[i].position)) ? Number(currentTxtToc[i].position) : NaN;
+                    if (!Number.isFinite(pos)) continue;
+                    if (pos < startPos || pos >= chunkEndAbs) continue;
+                    const rel = Math.max(0, Math.min(chunk.length - 1, Math.floor(pos - startPos)));
+                    chapterBreaks.push({ rel, idx: i });
+                }
+                chapterBreaks.sort((a, b) => (a.rel - b.rel));
+                for (const b of chapterBreaks) {
+                    if (!chapterAtOffset.has(b.rel)) chapterAtOffset.set(b.rel, b.idx);
+                }
+            }
             const breakChars = new Set(['\n', '。', '！', '？', '.', '!', '?', '；', ';', '，', ',', '、', ' ', '\t']);
             let offset = 0;
+            let chapterPtr = 0;
             while (offset < chunk.length) {
                 const abs = startPos + offset;
-                const end = Math.min(chunk.length, offset + charsPerPage);
+                let end = Math.min(chunk.length, offset + charsPerPage);
+                while (chapterPtr < chapterBreaks.length && chapterBreaks[chapterPtr].rel <= offset) chapterPtr += 1;
+                if (chapterPtr < chapterBreaks.length) {
+                    const nextBreakRel = chapterBreaks[chapterPtr].rel;
+                    if (Number.isFinite(nextBreakRel) && nextBreakRel > offset && nextBreakRel < end) {
+                        end = nextBreakRel;
+                    }
+                }
                 const windowText = chunk.slice(offset, end);
                 const lookBack = Math.max(40, Math.floor(charsPerPage * 0.22));
                 let cut = windowText.length;
@@ -1317,7 +1382,20 @@
                 }
                 if (cut <= 0) cut = windowText.length;
                 const pageText = chunk.slice(offset, offset + cut);
-                pages.push(`<div class="paged-text" data-abs="${abs}">${escapeHtml(pageText)}</div>`);
+                const chapterIdx = chapterAtOffset.has(offset) ? chapterAtOffset.get(offset) : null;
+                if (Number.isFinite(Number(chapterIdx))) {
+                    const nl = pageText.indexOf('\n');
+                    const titleRaw = (nl >= 0 ? pageText.slice(0, nl) : pageText).replace(/\r$/, '');
+                    const fallbackTitle = currentTxtToc && currentTxtToc[chapterIdx] && currentTxtToc[chapterIdx].label ? String(currentTxtToc[chapterIdx].label) : '';
+                    const title = String(titleRaw || '').trim() || String(fallbackTitle || '').trim();
+                    const body = nl >= 0 ? pageText.slice(nl + 1) : '';
+                    pages.push(
+                        `<div class="txt-chapter-title" data-chapter-id="${chapterIdx}" data-abs="${abs}">${escapeHtml(title)}</div>`
+                        + `<div class="paged-text" data-abs="${abs}">${escapeHtml(body)}</div>`
+                    );
+                } else {
+                    pages.push(`<div class="paged-text" data-abs="${abs}">${escapeHtml(pageText)}</div>`);
+                }
                 pageAbs.push(abs);
                 offset += cut;
             }
@@ -1892,6 +1970,7 @@
         }
 
         const isDraggingRef = { current: false };
+        const isSlideScrollingRef = { current: false };
         const touchStartRef = { current: { x: 0, y: 0, time: 0 } };
         let dragStartX = 0;
         let dragStartY = 0;
@@ -1919,8 +1998,11 @@
             const diffX = Math.abs(endX - (touchStartRef.current.x || 0));
             const diffY = Math.abs(endY - (touchStartRef.current.y || 0));
             const time = Date.now() - (touchStartRef.current.time || 0);
-            if (diffX > 10 || diffY > 10 || time > 300) return;
+            if (diffX >= 5 || diffY >= 5 || time >= 300) return;
             if (isDraggingRef.current) return;
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
             handleSlideModeClick({ clientX: endX, clientY: endY });
         };
 
@@ -1937,16 +2019,45 @@
                 const readerView = document.getElementById('readerView');
                 if (readerView && readerView.classList.contains('menu-visible')) return;
                 if (hasAnyReaderPanelOpen()) return;
+                if (isSlideScrollingRef.current) return;
+                isSlideScrollingRef.current = true;
                 lastFlipGestureAt = Date.now();
-                scrollSlidePage(-1, width);
+                const content = document.getElementById('readerContent');
+                const left = content ? (content.scrollLeft || 0) : 0;
+                if (content && left <= 5) {
+                    const hasToc = Array.isArray(currentTxtToc) && currentTxtToc.length > 0;
+                    if (hasToc && Number.isFinite(currentTxtTocActiveIndex) && currentTxtTocActiveIndex > 0) {
+                        const prevIdx = Math.max(0, currentTxtTocActiveIndex - 1);
+                        const prevPos = currentTxtToc[prevIdx] && Number.isFinite(Number(currentTxtToc[prevIdx].position))
+                            ? Number(currentTxtToc[prevIdx].position)
+                            : 0;
+                        jumpToTxtPosition(prevPos, prevIdx);
+                    } else {
+                        try { turnTxtPaged(-1); } catch (e) {}
+                    }
+                } else {
+                    scrollSlidePage(-1, width);
+                }
+                setTimeout(() => { isSlideScrollingRef.current = false; }, 500);
                 return;
             }
             if (clientX > third * 2) {
                 const readerView = document.getElementById('readerView');
                 if (readerView && readerView.classList.contains('menu-visible')) return;
                 if (hasAnyReaderPanelOpen()) return;
+                if (isSlideScrollingRef.current) return;
+                isSlideScrollingRef.current = true;
                 lastFlipGestureAt = Date.now();
-                scrollSlidePage(1, width);
+                const content = document.getElementById('readerContent');
+                const left = content ? (content.scrollLeft || 0) : 0;
+                const cw = content ? (content.clientWidth || 0) : 0;
+                const sw = content ? (content.scrollWidth || 0) : 0;
+                if (content && Math.ceil(left + cw) >= sw) {
+                    try { turnTxtPaged(1); } catch (e) {}
+                } else {
+                    scrollSlidePage(1, width);
+                }
+                setTimeout(() => { isSlideScrollingRef.current = false; }, 500);
                 return;
             }
             toggleMenu({ event: e, ignoreGuard: true });
@@ -2013,7 +2124,7 @@
             layer.addEventListener('pointercancel', onPointerUp, { passive: true });
             layer.addEventListener('touchstart', onTouchStart, { passive: true });
             layer.addEventListener('touchmove', onTouchMove, { passive: true });
-            layer.addEventListener('touchend', onTouchEnd, { passive: true });
+            layer.addEventListener('touchend', onTouchEnd, { passive: false });
             layer.addEventListener('touchcancel', onTouchEnd, { passive: true });
             layer.addEventListener('click', (e) => {
                 if (e && e.stopPropagation) e.stopPropagation();
@@ -2026,7 +2137,7 @@
             content.addEventListener('pointercancel', onPointerUp, { passive: true });
             content.addEventListener('touchstart', onTouchStart, { passive: true });
             content.addEventListener('touchmove', onTouchMove, { passive: true });
-            content.addEventListener('touchend', onTouchEnd, { passive: true });
+            content.addEventListener('touchend', onTouchEnd, { passive: false });
             content.addEventListener('touchcancel', onTouchEnd, { passive: true });
             content.addEventListener('click', handleMainClick, { passive: true });
 
@@ -2084,6 +2195,24 @@
             if (!out) return;
             const top = document.getElementById('readerPageIndicator');
             const txt = top ? String(top.textContent || '').trim() : '';
+            if (currentFlipMode === 'slide' && currentTxtContent) {
+                const chap = document.getElementById('readerChapterPageIndicator');
+                const chapTxt = chap ? String(chap.textContent || '').trim() : '';
+                const content = document.getElementById('readerContent');
+                const clientWidth = content ? (content.clientWidth || 1) : 1;
+                const scrollLeft = content ? Math.max(0, content.scrollLeft || 0) : 0;
+                const scrollWidth = content ? Math.max(clientWidth, content.scrollWidth || clientWidth) : clientWidth;
+                const localTotalPages = Math.max(1, Math.ceil(scrollWidth / clientWidth));
+                const localCurrentPageRaw = Math.round(scrollLeft / clientWidth) + 1;
+                const localCurrentPage = Math.max(1, Math.min(localTotalPages, localCurrentPageRaw));
+                const pageTxt = `${localCurrentPage}/${localTotalPages}`;
+                if (chapTxt) {
+                    out.innerHTML = `<span class="reader-footer-title">${escapeHtml(chapTxt)}</span><span class="reader-footer-sep">·</span><span class="reader-footer-page">${escapeHtml(pageTxt)}</span>`;
+                    return;
+                }
+                out.textContent = pageTxt;
+                return;
+            }
             if (txt) {
                 out.textContent = txt;
                 return;
@@ -2846,6 +2975,7 @@
         function setActiveTxtTocIndex(idx) {
             if (!Number.isFinite(idx)) return;
             const i = Math.max(-1, Math.min((currentTxtToc ? currentTxtToc.length : 0) - 1, Math.floor(idx)));
+            const prevIndex = currentTxtTocActiveIndex;
             const tocList = document.getElementById('tocList');
             if (tocList) {
                 const prev = tocList.querySelector('.toc-item.active');
@@ -2853,6 +2983,11 @@
                     const prevIdx = prev.getAttribute('data-toc-index');
                     if (Number.isFinite(Number(prevIdx)) && Number(prevIdx) === i) {
                         currentTxtTocActiveIndex = i;
+                        if (prevIndex !== i) {
+                            const tocPanel = document.getElementById('tocPanel');
+                            if (tocPanel && tocPanel.classList.contains('active')) setTimeout(scrollTocActiveIntoView, 0);
+                            try { updateSlidePageIndicatorByScroll(); } catch (e) {}
+                        }
                         return;
                     }
                     prev.classList.remove('active');
@@ -2861,6 +2996,11 @@
                 if (next) next.classList.add('active');
             }
             currentTxtTocActiveIndex = i;
+            if (prevIndex !== i) {
+                const tocPanel = document.getElementById('tocPanel');
+                if (tocPanel && tocPanel.classList.contains('active')) setTimeout(scrollTocActiveIntoView, 0);
+                try { updateSlidePageIndicatorByScroll(); } catch (e) {}
+            }
         }
 
         function normalizeEpubHref(href) {
@@ -2882,6 +3022,7 @@
         function setActiveEpubTocIndex(idx) {
             if (!Number.isFinite(idx)) return;
             const i = Math.max(-1, Math.min((currentEpubToc ? currentEpubToc.length : 0) - 1, Math.floor(idx)));
+            const prevIndex = currentEpubTocActiveIndex;
             const tocList = document.getElementById('tocList');
             if (tocList) {
                 const prev = tocList.querySelector('.toc-item.active');
@@ -2889,6 +3030,10 @@
                     const prevIdx = prev.getAttribute('data-epub-index');
                     if (Number.isFinite(Number(prevIdx)) && Number(prevIdx) === i) {
                         currentEpubTocActiveIndex = i;
+                        if (prevIndex !== i) {
+                            const tocPanel = document.getElementById('tocPanel');
+                            if (tocPanel && tocPanel.classList.contains('active')) setTimeout(scrollTocActiveIntoView, 0);
+                        }
                         return;
                     }
                     prev.classList.remove('active');
@@ -2897,6 +3042,10 @@
                 if (next) next.classList.add('active');
             }
             currentEpubTocActiveIndex = i;
+            if (prevIndex !== i) {
+                const tocPanel = document.getElementById('tocPanel');
+                if (tocPanel && tocPanel.classList.contains('active')) setTimeout(scrollTocActiveIntoView, 0);
+            }
         }
 
         function updateActiveEpubTocByHref(href) {
@@ -2940,6 +3089,10 @@
             const el = document.getElementById('readerPageIndicator');
             const chapEl = document.getElementById('readerChapterPageIndicator');
             if (!el && !chapEl) return;
+            if (currentFlipMode === 'slide' && currentTxtContent) {
+                try { updateSlidePageIndicatorByScroll(); } catch (e) {}
+                return;
+            }
             if (!currentTxtContent || !Number.isFinite(absolutePos)) {
                 if (lastEpubProgress && Number.isFinite(lastEpubProgress.percent)) {
                     if (el) el.textContent = `${lastEpubProgress.percent}%`;
@@ -3318,14 +3471,40 @@
             return Math.max(1, (content.clientWidth || 1) + gap);
         }
 
-        function snapSlideToPage() {
+        function updateSlidePageIndicatorByScroll() {
             const content = document.getElementById('readerContent');
+            const el = document.getElementById('readerPageIndicator');
+            const chapEl = document.getElementById('readerChapterPageIndicator');
+            if (!content || (!el && !chapEl)) return;
+            const clientWidth = content.clientWidth || 1;
+            const scrollLeft = Math.max(0, content.scrollLeft || 0);
+            const scrollWidth = Math.max(clientWidth, content.scrollWidth || clientWidth);
+            const localTotalPages = Math.max(1, Math.ceil(scrollWidth / clientWidth));
+            const localCurrentPageRaw = Math.round(scrollLeft / clientWidth) + 1;
+            const localCurrentPage = Math.max(1, Math.min(localTotalPages, localCurrentPageRaw));
+            const hasChapters = Array.isArray(currentTxtToc) && currentTxtToc.length > 0;
+            const chapterIndex = (Number.isFinite(currentTxtTocActiveIndex) && currentTxtTocActiveIndex >= 0)
+                ? currentTxtTocActiveIndex
+                : (Number.isFinite(txtActiveAbsPos) ? computeTxtChapterIndexByAbsPos(txtActiveAbsPos) : -1);
+            const totalChapters = hasChapters ? currentTxtToc.length : 0;
+            const chapterInfo = (hasChapters && chapterIndex >= 0) ? `第 ${chapterIndex + 1} / ${totalChapters} 章` : '';
+            const pageInfo = `${localCurrentPage} / ${localTotalPages} 页`;
+            if (el) el.textContent = chapterInfo ? `${chapterInfo} · ${pageInfo}` : pageInfo;
+            if (chapEl) {
+                const title = (hasChapters && chapterIndex >= 0 && currentTxtToc[chapterIndex] && currentTxtToc[chapterIndex].label)
+                    ? String(currentTxtToc[chapterIndex].label).trim()
+                    : '';
+                chapEl.textContent = title;
+            }
+            try { updateReaderBottomStatusPage(); } catch (e) {}
+        }
+
+        function withTempScrollBehavior(content, value, durationMs, fn) {
             if (!content) return;
-            if (currentFlipMode !== 'slide') return;
-            const step = getSlidePageStepPx(content);
-            const nextLeft = Math.round((content.scrollLeft || 0) / step) * step;
-            if (Math.abs(nextLeft - content.scrollLeft) < 2) return;
-            content.scrollTo({ left: nextLeft, behavior: 'smooth' });
+            const prev = content.style.scrollBehavior;
+            content.style.scrollBehavior = value || '';
+            try { fn(); } catch (e) {}
+            window.setTimeout(() => { content.style.scrollBehavior = prev || ''; }, Math.max(0, durationMs || 0));
         }
 
         function scrollSlidePage(direction, pageWidth = null) {
@@ -3334,7 +3513,9 @@
             if (currentFlipMode !== 'slide') return;
             const base = Number.isFinite(pageWidth) && pageWidth > 0 ? pageWidth : (content.clientWidth || 1);
             const step = Math.max(1, base + (getSlidePageStepPx(content) - (content.clientWidth || 1)));
-            content.scrollBy({ left: (direction > 0 ? 1 : -1) * step, behavior: 'smooth' });
+            withTempScrollBehavior(content, 'smooth', 520, () => {
+                content.scrollBy({ left: (direction > 0 ? 1 : -1) * step, behavior: 'auto' });
+            });
         }
 
         let txtScrollRaf = null;
@@ -3361,6 +3542,10 @@
                         progressRatio = clamp01(snap.scrollRatio);
                         const abs = Math.max(0, Math.min(currentTxtContent.length - 1, snap.absolutePos));
                         if (!Number.isFinite(abs)) return;
+                        if (currentFlipMode === 'slide') {
+                            try { updateSlidePageIndicatorByScroll(); } catch (e) {}
+                            schedulePersistTxtAnchorProgress('auto');
+                        }
                         if (abs === txtActiveAbsPos) return;
                         txtActiveAbsPos = abs;
                         txtActiveAnchorId = txtAnchorIdForAbsPos(currentBookId, abs);
@@ -3419,6 +3604,19 @@
                 : (contentArea.scrollHeight - contentArea.clientHeight);
             const scrollPos = isSlide ? contentArea.scrollLeft : contentArea.scrollTop;
             const scrollRatio = maxScroll > 0 ? Math.min(1, Math.max(0, scrollPos / maxScroll)) : 0;
+            if (isSlide && txtPagedMode === 'slide' && Array.isArray(txtPagedPageAbs) && txtPagedPageAbs.length > 0) {
+                const w = contentArea.clientWidth || 1;
+                const nextIdx = Math.max(0, Math.min(txtPagedPageAbs.length - 1, Math.round((contentArea.scrollLeft || 0) / w)));
+                const absFromPage = txtPagedPageAbs[nextIdx];
+                const absolutePos = Number.isFinite(absFromPage) ? Math.max(0, Math.min(currentTxtContent.length - 1, absFromPage)) : currentStart;
+                const ratio = currentTxtContent.length > 0 ? (absolutePos / currentTxtContent.length) : 0;
+                const percent = absolutePos > 0
+                    ? Math.min(100, Math.max(1, Math.round(ratio * 100)))
+                    : 0;
+                const loadedLength = parseInt(contentArea.getAttribute('data-render-length') || '0');
+                const resumeStart = Math.max(0, Math.floor(absolutePos / CHUNK_SIZE) * CHUNK_SIZE);
+                return { absolutePos, percent, scrollTop: scrollPos, chunkStart: currentStart, scrollRatio, progressRatio: scrollRatio, ratio, loadedLength, resumeStart };
+            }
             const paragraphs = Array.from(contentArea.querySelectorAll('p[data-pos]'));
             let target = null;
             if (isSlide) {
@@ -3442,9 +3640,10 @@
                 }
             }
             if (!target && paragraphs.length > 0) target = paragraphs.find(p => p.getAttribute('data-anchor') !== '1') || paragraphs[0];
-            const relativePos = target ? parseInt(target.getAttribute('data-pos') || '0') : 0;
-            const absolutePosByParagraph = Math.min(currentTxtContent.length - 1, currentStart + relativePos);
-            const absolutePos = absolutePosByParagraph;
+            const absolutePosFromAbsAttr = target ? parseInt(target.getAttribute('data-abs') || 'NaN', 10) : NaN;
+            const absolutePosFromPosAttr = target ? (currentStart + parseInt(target.getAttribute('data-pos') || '0', 10)) : NaN;
+            const absolutePosByParagraph = Number.isFinite(absolutePosFromAbsAttr) ? absolutePosFromAbsAttr : absolutePosFromPosAttr;
+            const absolutePos = Math.max(0, Math.min(currentTxtContent.length - 1, Number.isFinite(absolutePosByParagraph) ? absolutePosByParagraph : currentStart));
             const ratio = currentTxtContent.length > 0 ? (absolutePos / currentTxtContent.length) : 0;
             const percent = absolutePos > 0
                 ? Math.min(100, Math.max(1, Math.round(ratio * 100)))
@@ -3508,6 +3707,18 @@
                 contentArea.removeAttribute('data-next-start');
             }
             
+            const tocAbsSet = new Set();
+            try {
+                if (Array.isArray(currentTxtToc) && currentTxtToc.length > 0) {
+                    const endAbs = startPos + chunk.length;
+                    for (let i = 0; i < currentTxtToc.length; i += 1) {
+                        const p = currentTxtToc[i] && Number.isFinite(Number(currentTxtToc[i].position)) ? Number(currentTxtToc[i].position) : NaN;
+                        if (!Number.isFinite(p)) continue;
+                        if (p < startPos || p >= endAbs) continue;
+                        tocAbsSet.add(Math.floor(p));
+                    }
+                }
+            } catch (e) {}
             let pos = 0;
             const html = chunk.split('\n').map(line => {
                 const currentPos = pos;
@@ -3515,7 +3726,8 @@
                 const abs = startPos + currentPos;
                 const display = String(line || '').replace(/\r$/, '');
                 const id = txtAnchorIdForAbsPos(currentBookId, abs);
-                return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" class="reader-txt-paragraph">${escapeHtml(display)}</p>` : '';
+                const cls = tocAbsSet.has(abs) ? 'reader-txt-paragraph reader-txt-paragraph--chapter' : 'reader-txt-paragraph';
+                return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" class="${cls}">${escapeHtml(display)}</p>` : '';
             }).join('');
             
             inner.innerHTML = html;
@@ -3551,6 +3763,18 @@
              if (!container || !inner) return;
              
              const chunk = currentTxtContent.slice(startPos, startPos + CHUNK_SIZE);
+             const tocAbsSet = new Set();
+             try {
+                 if (Array.isArray(currentTxtToc) && currentTxtToc.length > 0) {
+                     const endAbs = startPos + chunk.length;
+                     for (let i = 0; i < currentTxtToc.length; i += 1) {
+                         const p = currentTxtToc[i] && Number.isFinite(Number(currentTxtToc[i].position)) ? Number(currentTxtToc[i].position) : NaN;
+                         if (!Number.isFinite(p)) continue;
+                         if (p < startPos || p >= endAbs) continue;
+                         tocAbsSet.add(Math.floor(p));
+                     }
+                 }
+             } catch (e) {}
              let pos = 0;
              const html = chunk.split('\n').map(line => {
                  const currentPos = pos;
@@ -3558,7 +3782,8 @@
                  const abs = startPos + currentPos;
                  const display = String(line || '').replace(/\r$/, '');
                  const id = txtAnchorIdForAbsPos(currentBookId, abs);
-                 return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" class="reader-txt-paragraph">${escapeHtml(display)}</p>` : '';
+                 const cls = tocAbsSet.has(abs) ? 'reader-txt-paragraph reader-txt-paragraph--chapter' : 'reader-txt-paragraph';
+                 return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" class="${cls}">${escapeHtml(display)}</p>` : '';
              }).join('');
              
              const range = document.createRange();
@@ -3595,6 +3820,18 @@
             const container = document.getElementById('readerContent');
             if (!container) return;
             const chunk = currentTxtContent.slice(startPos, startPos + CHUNK_SIZE);
+            const tocAbsSet = new Set();
+            try {
+                if (Array.isArray(currentTxtToc) && currentTxtToc.length > 0) {
+                    const endAbs = startPos + chunk.length;
+                    for (let i = 0; i < currentTxtToc.length; i += 1) {
+                        const p = currentTxtToc[i] && Number.isFinite(Number(currentTxtToc[i].position)) ? Number(currentTxtToc[i].position) : NaN;
+                        if (!Number.isFinite(p)) continue;
+                        if (p < startPos || p >= endAbs) continue;
+                        tocAbsSet.add(Math.floor(p));
+                    }
+                }
+            } catch (e) {}
             let pos = 0;
             const html = chunk.split('\n').map(line => {
                 const currentPos = pos;
@@ -3602,7 +3839,8 @@
                 const abs = startPos + currentPos;
                 const display = String(line || '').replace(/\r$/, '');
                 const id = txtAnchorIdForAbsPos(currentBookId, abs);
-                return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" class="reader-txt-paragraph">${escapeHtml(display)}</p>` : '';
+                const cls = tocAbsSet.has(abs) ? 'reader-txt-paragraph reader-txt-paragraph--chapter' : 'reader-txt-paragraph';
+                return display.trim() ? `<p id="${id}" data-abs="${abs}" data-pos="${currentPos}" class="${cls}">${escapeHtml(display)}</p>` : '';
             }).join('');
             const range = document.createRange();
             range.selectNodeContents(container);
@@ -3631,7 +3869,7 @@
         }
 
         function maybeAutoAppendTxt(force = false) {
-            if (currentFlipMode !== 'scroll') return;
+            if (currentFlipMode !== 'scroll' && !(currentFlipMode === 'slide' && force)) return;
             if (!currentTxtContent) return;
             if (isRestoringTxt) return;
             if (isClosingReader) return;
@@ -3660,7 +3898,7 @@
         }
 
         function maybeAutoPrependTxt(force = false) {
-            if (currentFlipMode !== 'scroll') return;
+            if (currentFlipMode !== 'scroll' && !(currentFlipMode === 'slide' && force)) return;
             if (!currentTxtContent) return;
             if (isRestoringTxt) return;
             if (isClosingReader) return;
@@ -3737,8 +3975,26 @@
             clearAllSelections();
             forceCloseSelectionQueryPanel();
             forceCloseSettingsPanel();
+            const contentArea = document.getElementById('readerContent');
+            try { if (contentArea) contentArea.scrollLeft = 0; } catch (e) {}
+            try { if (contentArea) contentArea.scrollTop = 0; } catch (e) {}
+            try { if (contentArea) contentArea.style.scrollBehavior = 'auto'; } catch (e) {}
+            try {
+                if (rendition && rendition.display) {
+                    const p = rendition.display(href);
+                    if (p && p.then) {
+                        p.then(() => {
+                            try { setActiveEpubTocIndex(idx); } catch (e) {}
+                            try { closeTOC(); } catch (e) {}
+                        }).catch(() => {
+                            try { setActiveEpubTocIndex(idx); } catch (e) {}
+                            try { closeTOC(); } catch (e) {}
+                        });
+                        return;
+                    }
+                }
+            } catch (e) {}
             try { setActiveEpubTocIndex(idx); } catch (e) {}
-            try { if (rendition && rendition.display) rendition.display(href); } catch (e) {}
             try { closeTOC(); } catch (e) {}
         }
 
@@ -3753,14 +4009,23 @@
             if (moreMenu) moreMenu.classList.remove('active');
             if (readerView) readerView.classList.add('menu-visible');
             const CHUNK_SIZE = 15000;
-            const startPos = Math.max(0, Math.floor(pos / CHUNK_SIZE) * CHUNK_SIZE);
+            const startPos = (Number.isFinite(tocIdx))
+                ? Math.max(0, Math.min(Math.max(0, currentTxtContent.length - 1), Math.floor(pos)))
+                : Math.max(0, Math.floor(pos / CHUNK_SIZE) * CHUNK_SIZE);
             const contentArea = document.getElementById('readerContent');
+            if (contentArea) {
+                try { contentArea.style.scrollBehavior = 'auto'; } catch (e) {}
+                try {
+                    if (currentFlipMode === 'scroll') contentArea.scrollTop = 0;
+                    else if (currentFlipMode === 'slide') contentArea.scrollLeft = 0;
+                } catch (e) {}
+            }
             if (contentArea && (currentFlipMode === 'slide' || currentFlipMode === 'simulation')) {
                 contentArea.setAttribute('data-chunk-start', String(startPos));
                 contentArea.setAttribute('data-render-length', String(Math.min(CHUNK_SIZE, currentTxtContent.length - startPos)));
                 if (startPos + CHUNK_SIZE < currentTxtContent.length) contentArea.setAttribute('data-next-start', String(startPos + CHUNK_SIZE));
                 else contentArea.removeAttribute('data-next-start');
-                buildTxtPagedView(currentFlipMode, pos);
+                buildTxtPagedView(currentFlipMode, Number.isFinite(tocIdx) ? startPos : pos);
                 closeTOC();
                 if (Number.isFinite(tocIdx)) setActiveTxtTocIndex(tocIdx);
                 else updateActiveTxtTocByPos(pos);
