@@ -1,0 +1,719 @@
+From 0f5c87dddd309317a0c2699538a9788f8fa7212b Mon Sep 17 00:00:00 2001
+From: gqcc <53927758+Mr-guoqiang@users.noreply.github.com>
+Date: Tue, 10 Feb 2026 16:59:52 +0800
+Subject: [PATCH] Fix-slide-mode-pagination-gap-and-touch-tap-handling
+
+---
+ ReaderStyles.css              |  94 +++++++--
+ design_v14_functionality.html | 347 +++++++++++++++++++++++++++++-----
+ index.html                    |   4 +-
+ 3 files changed, 376 insertions(+), 69 deletions(-)
+
+diff --git a/ReaderStyles.css b/ReaderStyles.css
+index e22bfdd..158bb9b 100644
+--- a/ReaderStyles.css
++++ b/ReaderStyles.css
+@@ -57,6 +57,10 @@
+             padding: 0;
+         }
+ 
++        body, #root, .reader-content {
++            transition: background-color 0.3s ease, color 0.3s ease !important;
++        }
++
+         input,
+         textarea,
+         [contenteditable="true"],
+@@ -561,7 +565,6 @@
+             overflow-wrap: anywhere;
+         }
+         .reader-content-inner { min-height: 100%; width: 100%; }
+-        .mode-slide > .reader-content-inner { display: contents; }
+         .mode-sim > .reader-content-inner { display: contents; }
+         .reader-content::-webkit-scrollbar { width: 0; height: 0; display: none; }
+         .reader-content * { max-width: 100%; }
+@@ -577,6 +580,11 @@
+         
+         /* Flip Mode Styles */
+         .mode-scroll { overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
++        .reader-content.scroll {
++            overflow-y: auto !important;
++            overflow-x: hidden !important;
++            touch-action: pan-y !important;
++        }
+         .flip-segment {
+             position: relative;
+             background: rgba(128,128,128,0.14);
+@@ -612,32 +620,82 @@
+             transition: opacity 160ms ease;
+         }
+         .flip-option.active { opacity: 1; font-weight: 600; }
+-        .mode-slide { 
+-            overflow-x: auto; 
+-            overflow-y: hidden;
+-            height: 100%;
+-            padding: 0;
++        .reader-mode-segment {
++            position: relative;
++            background: rgba(128,128,128,0.18);
++            border-radius: 12px;
++            padding: 4px;
+             display: flex;
++            gap: 0;
++            user-select: none;
++            -webkit-user-select: none;
++        }
++        .reader-mode-indicator {
++            position: absolute;
++            top: 4px;
++            bottom: 4px;
++            left: 4px;
++            width: calc((100% - 8px) / 3);
++            border-radius: 8px;
++            background: rgba(255,255,255,0.92);
++            box-shadow: 0 10px 26px rgba(0,0,0,0.16);
++            transform: translateX(0%);
++            transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
++        }
++        .reader-mode-option {
++            position: relative;
++            z-index: 1;
++            flex: 1;
++            text-align: center;
++            padding: 8px 10px;
++            border-radius: 8px;
++            font-size: 14px;
++            cursor: pointer;
++            opacity: 0.72;
++            border: 0;
++            background: transparent;
++            color: inherit;
++            transition: opacity 160ms ease;
++        }
++        .reader-mode-option.active { opacity: 1; font-weight: 600; color: #333333 !important; }
++        .reader-mode-option--disabled { opacity: 0.35; cursor: not-allowed; }
++
++        .reader-content.slide {
++            height: 100vh !important;
++            width: 100vw !important;
++            box-sizing: border-box;
++            column-width: 100vw;
++            column-gap: 120px !important;
++            column-fill: auto;
++            overflow-x: scroll !important;
++            overflow-y: hidden !important;
++            touch-action: pan-x !important;
+             scroll-snap-type: x mandatory;
+-            scroll-snap-stop: normal;
+             -webkit-overflow-scrolling: touch;
+-            touch-action: pan-x;
++            transform: translateZ(0);
++            will-change: scroll-position;
++            padding: 0 !important;
+         }
+-        .mode-slide .paged-page { position: relative; }
+-        .mode-slide .paged-page::after {
+-            content: "";
+-            position: absolute;
+-            top: 0;
+-            right: 0;
+-            bottom: 0;
+-            width: 1px;
+-            background: rgba(0,0,0,0.08);
+-            pointer-events: none;
++        .reader-content.slide .reader-content-inner {
++            height: 100%;
++            column-fill: auto;
++            display: contents;
++        }
++        .reader-content.slide p {
++            padding: 0 24px;
++            margin-top: 56px;
++            margin-bottom: 20px;
++            break-inside: avoid;
++            scroll-snap-align: start;
++        }
++        .reader-content.slide .reader-interaction-layer {
++            display: none;
+         }
+         .mode-sim {
+             overflow: hidden;
+             height: 100%;
+             padding: 0;
++            padding: 0;
+             position: relative;
+             touch-action: pan-x;
+         }
+diff --git a/design_v14_functionality.html b/design_v14_functionality.html
+index 88dde50..3a98a62 100644
+--- a/design_v14_functionality.html
++++ b/design_v14_functionality.html
+@@ -1,4 +1,4 @@
+-﻿﻿<!DOCTYPE html>
++﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+ <html lang="zh-CN">
+ <head>
+     <meta charset="UTF-8">
+@@ -8,8 +8,8 @@
+     <meta name="apple-mobile-web-app-capable" content="yes">
+     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+     <meta name="apple-mobile-web-app-title" content="MOZI">
+-    <link rel="apple-touch-icon" id="appleTouchIcon" sizes="180x180" href="/mozi_icon_180.png">
+-    <link rel="apple-touch-icon-precomposed" id="appleTouchIconPre" sizes="180x180" href="/mozi_icon_180.png">
++    <link rel="apple-touch-icon" id="appleTouchIcon" sizes="180x180" href="/icon/mozi_icon_180.png">
++    <link rel="apple-touch-icon-precomposed" id="appleTouchIconPre" sizes="180x180" href="/icon/mozi_icon_180.png">
+     <link rel="icon" type="image/svg+xml" href="./icon.svg?v=9">
+     <meta name="theme-color" content="#141218">
+     <link rel="manifest" href="/manifest.json">
+@@ -368,6 +368,15 @@
+                         <span class="reader-fontsize-plus">A+</span>
+                     </div>
+                 </div>
++                <div class="setting-row">
++                    <div class="setting-label">翻页</div>
++                    <div class="reader-mode-segment" role="tablist" aria-label="翻页模式">
++                        <div class="reader-mode-indicator" id="readerModeIndicator"></div>
++                        <button class="reader-mode-option" id="readerModeOptScroll" type="button" onclick="event.stopPropagation(); setFlipMode('scroll')">上下</button>
++                        <button class="reader-mode-option" id="readerModeOptSlide" type="button" onclick="event.stopPropagation(); setFlipMode('slide')">平移</button>
++                        <button class="reader-mode-option reader-mode-option--disabled" id="readerModeOptSim" type="button" disabled>仿真</button>
++                    </div>
++                </div>
+                 <div class="setting-row">
+                     <div class="setting-label">行间距</div>
+                     <div class="slider-container">
+@@ -1175,32 +1184,86 @@
+             return content;
+         }
+ 
++        const READER_MODE_KEY = 'reader_mode';
++
++        function normalizeReaderMode(mode) {
++            const m = String(mode || '').trim();
++            if (m === 'scroll' || m === 'slide' || m === 'simulation') return m;
++            return 'scroll';
++        }
++
++        function getStoredReaderMode() {
++            try {
++                const v = localStorage.getItem(READER_MODE_KEY) || localStorage.getItem('reader_flip_mode_last');
++                return normalizeReaderMode(v);
++            } catch (e) {
++                return 'scroll';
++            }
++        }
++
++        function syncReaderModeUI(mode = currentFlipMode) {
++            const m = normalizeReaderMode(mode);
++            const optScroll = document.getElementById('readerModeOptScroll');
++            const optSlide = document.getElementById('readerModeOptSlide');
++            const optSim = document.getElementById('readerModeOptSim');
++            if (optScroll) optScroll.classList.toggle('active', m === 'scroll');
++            if (optSlide) optSlide.classList.toggle('active', m === 'slide');
++            if (optSim) optSim.classList.toggle('active', m === 'simulation');
++            const indicator = document.getElementById('readerModeIndicator');
++            if (indicator) {
++                const idx = m === 'scroll' ? 0 : (m === 'slide' ? 1 : 2);
++                indicator.style.transform = `translateX(${idx * 100}%)`;
++            }
++        }
++
++        function applyProgressRatioToContent(mode = currentFlipMode, attempts = 0) {
++            const contentArea = document.getElementById('readerContent');
++            if (!contentArea) return;
++            const m = normalizeReaderMode(mode);
++            const r = clamp01(progressRatio);
++            const maxScroll = m === 'slide'
++                ? Math.max(0, (contentArea.scrollWidth || 0) - (contentArea.clientWidth || 0))
++                : Math.max(0, (contentArea.scrollHeight || 0) - (contentArea.clientHeight || 0));
++            if (maxScroll <= 0) {
++                if (attempts < 10 && r > 0) setTimeout(() => applyProgressRatioToContent(m, attempts + 1), 60);
++                return;
++            }
++            if (m === 'slide') contentArea.scrollLeft = Math.max(0, Math.min(maxScroll, r * maxScroll));
++            else contentArea.scrollTop = Math.max(0, Math.min(maxScroll, r * maxScroll));
++        }
++
+         function setFlipMode(mode) {
+-            let nextMode = mode;
+-            nextMode = 'scroll';
++            const contentArea = document.getElementById('readerContent');
++            const prevMode = normalizeReaderMode(currentFlipMode);
++            if (contentArea && (prevMode === 'scroll' || prevMode === 'slide')) {
++                const prevMax = prevMode === 'slide'
++                    ? Math.max(0, (contentArea.scrollWidth || 0) - (contentArea.clientWidth || 0))
++                    : Math.max(0, (contentArea.scrollHeight || 0) - (contentArea.clientHeight || 0));
++                const prevPos = prevMode === 'slide' ? (contentArea.scrollLeft || 0) : (contentArea.scrollTop || 0);
++                if (prevMax > 0) progressRatio = clamp01(prevPos / prevMax);
++            }
++
++            let nextMode = normalizeReaderMode(mode);
++            if (nextMode !== 'scroll' && !currentTxtContent) nextMode = 'scroll';
+             currentFlipMode = nextMode;
++            try { localStorage.setItem(READER_MODE_KEY, String(currentFlipMode)); } catch (e) {}
+             try { localStorage.setItem('reader_flip_mode_last', String(currentFlipMode)); } catch (e) {}
+-            try { invalidateTxtCharsPerPage(); } catch (e) {}
+-            // Update UI
+-            document.querySelectorAll('.flip-option').forEach(el => el.classList.remove('active'));
+-            const opt = document.getElementById('opt-' + nextMode);
+-            if (opt) opt.classList.add('active');
+-            try {
+-                const indicator = document.getElementById('flipModeIndicator');
+-                if (indicator) {
+-                    const idx = nextMode === 'scroll' ? 0 : 1;
+-                    indicator.style.transform = `translateX(${idx * 100}%)`;
++            try { syncReaderModeUI(currentFlipMode); } catch (e) {}
++
++            if (contentArea) {
++                contentArea.classList.toggle('scroll', currentFlipMode === 'scroll');
++                contentArea.classList.toggle('slide', currentFlipMode === 'slide');
++                contentArea.classList.remove('mode-scroll');
++                contentArea.classList.remove('mode-slide');
++                contentArea.classList.remove('reader-content-slide');
++                if (currentFlipMode !== 'simulation') contentArea.classList.remove('mode-sim');
++                if (currentFlipMode === 'slide') {
++                    setTimeout(() => applyProgressRatioToContent('slide'), 0);
++                } else if (currentFlipMode === 'scroll') {
++                    setTimeout(() => applyProgressRatioToContent('scroll'), 0);
+                 }
+-            } catch (e) {}
+-            // Apply logic
+-            const contentArea = document.getElementById('readerContent');
+-            const readerView = document.getElementById('readerView');
+-            contentArea.classList.add('mode-scroll');
+-            contentArea.classList.remove('mode-slide');
+-            contentArea.classList.remove('mode-sim');
+-            readerView.classList.remove('flip-slide');
+-            destroyTxtPagedView(Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
+-            if (contentArea.scrollLeft) contentArea.scrollLeft = 0;
++            }
++
+             schedulePersistTxtAnchorProgress('auto');
+         }
+ 
+@@ -1659,6 +1722,7 @@
+             }
+         }
+         let currentFlipMode = 'scroll';
++        let progressRatio = 0;
+         let lastFlipGestureAt = 0;
+         let txtParagraphObserver = null;
+         let txtSentinelObserver = null;
+@@ -1722,7 +1786,6 @@
+         }
+ 
+         let readerInteractionLayerBound = false;
+-        let readerInteractionLastTouchAt = 0;
+         let readerInteractionScrollSyncBound = false;
+ 
+         function clamp01(n) {
+@@ -1809,16 +1872,93 @@
+ 
+             lastFlipGestureAt = Date.now();
+             if (intent === 'prev') {
+-                if (currentTxtContent && (currentFlipMode === 'slide' || currentFlipMode === 'simulation')) turnTxtPaged(-1);
++                if (currentTxtContent && currentFlipMode === 'simulation') turnTxtPaged(-1);
++                else if (currentTxtContent && currentFlipMode === 'slide') scrollSlidePage(-1);
+                 else scrollPage(-1);
+                 return;
+             }
+             if (intent === 'next') {
+-                if (currentTxtContent && (currentFlipMode === 'slide' || currentFlipMode === 'simulation')) turnTxtPaged(1);
++                if (currentTxtContent && currentFlipMode === 'simulation') turnTxtPaged(1);
++                else if (currentTxtContent && currentFlipMode === 'slide') scrollSlidePage(1);
+                 else scrollPage(1);
+             }
+         }
+ 
++        function isTap(start, end, time) {
++            const diffX = Math.abs((end.x || 0) - (start.x || 0));
++            const diffY = Math.abs((end.y || 0) - (start.y || 0));
++            const diffTime = Date.now() - (time || 0);
++            return diffX < 10 && diffY < 10 && diffTime < 300;
++        }
++
++        const isDraggingRef = { current: false };
++        const touchStartRef = { current: { x: 0, y: 0, time: 0 } };
++        let dragStartX = 0;
++        let dragStartY = 0;
++        let dragActive = false;
++
++        function markDraggingIfMoved(clientX, clientY) {
++            if (!dragActive || isDraggingRef.current) return;
++            const dx = Math.abs((clientX || 0) - (dragStartX || 0));
++            const dy = Math.abs((clientY || 0) - (dragStartY || 0));
++            if (dx > 10 || dy > 10) isDraggingRef.current = true;
++        }
++
++        function endDragSession() {
++            dragActive = false;
++            if (!isDraggingRef.current) return;
++            setTimeout(() => { isDraggingRef.current = false; }, 350);
++        }
++
++        const handleSlideTouchEnd = (e) => {
++            if (currentFlipMode !== 'slide') return;
++            if (!e || !e.changedTouches || !e.changedTouches[0]) return;
++            const t = e.changedTouches[0];
++            const endX = t.clientX || 0;
++            const endY = t.clientY || 0;
++            const diffX = Math.abs(endX - (touchStartRef.current.x || 0));
++            const diffY = Math.abs(endY - (touchStartRef.current.y || 0));
++            const time = Date.now() - (touchStartRef.current.time || 0);
++            if (diffX > 10 || diffY > 10 || time > 300) return;
++            if (isDraggingRef.current) return;
++            handleSlideModeClick({ clientX: endX, clientY: endY });
++        };
++
++        const handleScrollModeClick = (e) => {
++            const intent = getReaderInteractionIntent(e.clientX || 0, e.clientY || 0);
++            dispatchReaderInteractionIntent(intent, e);
++        };
++
++        const handleSlideModeClick = (e) => {
++            const { clientX } = e;
++            const width = window.innerWidth || 1;
++            const third = width / 3;
++            if (clientX < third) {
++                const readerView = document.getElementById('readerView');
++                if (readerView && readerView.classList.contains('menu-visible')) return;
++                if (hasAnyReaderPanelOpen()) return;
++                lastFlipGestureAt = Date.now();
++                scrollSlidePage(-1, width);
++                return;
++            }
++            if (clientX > third * 2) {
++                const readerView = document.getElementById('readerView');
++                if (readerView && readerView.classList.contains('menu-visible')) return;
++                if (hasAnyReaderPanelOpen()) return;
++                lastFlipGestureAt = Date.now();
++                scrollSlidePage(1, width);
++                return;
++            }
++            toggleMenu({ event: e, ignoreGuard: true });
++        };
++
++        const handleMainClick = (e) => {
++            if (isDraggingRef.current) return;
++            if (!e) return;
++            if (currentFlipMode === 'slide') handleSlideModeClick(e);
++            else handleScrollModeClick(e);
++        };
++
+         function bindReaderInteractionLayer() {
+             if (readerInteractionLayerBound) return;
+             const layer = document.getElementById('readerInteractionLayer');
+@@ -1826,21 +1966,69 @@
+             if (!layer || !content) return;
+             readerInteractionLayerBound = true;
+ 
+-            const onTouchEnd = (e) => {
+-                readerInteractionLastTouchAt = Date.now();
+-                if (!e || !e.changedTouches || !e.changedTouches[0]) return;
+-                const t = e.changedTouches[0];
+-                const intent = getReaderInteractionIntent(t.clientX || 0, t.clientY || 0);
+-                dispatchReaderInteractionIntent(intent, e);
++            const onPointerDown = (e) => {
++                if (!e) return;
++                if (e.stopPropagation) e.stopPropagation();
++                if (e.pointerType === 'mouse' && e.buttons !== 1) return;
++                dragActive = true;
++                isDraggingRef.current = false;
++                dragStartX = e.clientX || 0;
++                dragStartY = e.clientY || 0;
+             };
+-            const onClick = (e) => {
++            const onPointerMove = (e) => {
+                 if (!e) return;
+-                if ((Date.now() - readerInteractionLastTouchAt) < 650) return;
+-                const intent = getReaderInteractionIntent(e.clientX || 0, e.clientY || 0);
+-                dispatchReaderInteractionIntent(intent, e);
++                if (e.stopPropagation) e.stopPropagation();
++                markDraggingIfMoved(e.clientX || 0, e.clientY || 0);
++            };
++            const onPointerUp = (e) => {
++                if (e && e.stopPropagation) e.stopPropagation();
++                endDragSession();
++            };
++
++            const onTouchStart = (e) => {
++                if (!e || !e.touches || !e.touches[0]) return;
++                if (e.stopPropagation) e.stopPropagation();
++                const t = e.touches[0];
++                touchStartRef.current = { x: t.clientX || 0, y: t.clientY || 0, time: Date.now() };
++                dragActive = true;
++                isDraggingRef.current = false;
++                dragStartX = t.clientX || 0;
++                dragStartY = t.clientY || 0;
++            };
++            const onTouchMove = (e) => {
++                if (!e || !e.touches || !e.touches[0]) return;
++                if (e.stopPropagation) e.stopPropagation();
++                const t = e.touches[0];
++                markDraggingIfMoved(t.clientX || 0, t.clientY || 0);
++            };
++            const onTouchEnd = (e) => {
++                if (e && e.stopPropagation) e.stopPropagation();
++                try { handleSlideTouchEnd(e); } catch (err) {}
++                endDragSession();
+             };
++
++            layer.addEventListener('pointerdown', onPointerDown, { passive: true });
++            layer.addEventListener('pointermove', onPointerMove, { passive: true });
++            layer.addEventListener('pointerup', onPointerUp, { passive: true });
++            layer.addEventListener('pointercancel', onPointerUp, { passive: true });
++            layer.addEventListener('touchstart', onTouchStart, { passive: true });
++            layer.addEventListener('touchmove', onTouchMove, { passive: true });
+             layer.addEventListener('touchend', onTouchEnd, { passive: true });
+-            layer.addEventListener('click', onClick, { passive: true });
++            layer.addEventListener('touchcancel', onTouchEnd, { passive: true });
++            layer.addEventListener('click', (e) => {
++                if (e && e.stopPropagation) e.stopPropagation();
++                handleMainClick(e);
++            }, { passive: true });
++
++            content.addEventListener('pointerdown', onPointerDown, { passive: true });
++            content.addEventListener('pointermove', onPointerMove, { passive: true });
++            content.addEventListener('pointerup', onPointerUp, { passive: true });
++            content.addEventListener('pointercancel', onPointerUp, { passive: true });
++            content.addEventListener('touchstart', onTouchStart, { passive: true });
++            content.addEventListener('touchmove', onTouchMove, { passive: true });
++            content.addEventListener('touchend', onTouchEnd, { passive: true });
++            content.addEventListener('touchcancel', onTouchEnd, { passive: true });
++            content.addEventListener('click', handleMainClick, { passive: true });
+ 
+             if (!readerInteractionScrollSyncBound) {
+                 readerInteractionScrollSyncBound = true;
+@@ -2089,7 +2277,8 @@
+                 if (dt > 650) return;
+                 const direction = dx < 0 ? 1 : -1;
+                 lastFlipGestureAt = Date.now();
+-                turnTxtPaged(direction);
++                if (currentFlipMode === 'slide') scrollSlidePage(direction);
++                else turnTxtPaged(direction);
+             };
+ 
+             const ensureSimDrag = (direction) => {
+@@ -2385,6 +2574,11 @@
+             const contentArea = document.getElementById('readerContent');
+             const isSlide = currentFlipMode === 'slide';
+             const scrollPos = contentArea ? (isSlide ? contentArea.scrollLeft : contentArea.scrollTop) : 0;
++            const maxScroll = contentArea
++                ? (isSlide ? (contentArea.scrollWidth - contentArea.clientWidth) : (contentArea.scrollHeight - contentArea.clientHeight))
++                : 0;
++            const viewRatio = maxScroll > 0 ? clamp01(scrollPos / maxScroll) : 0;
++            progressRatio = viewRatio;
+             const nearEdge = contentArea ? (scrollPos <= 80) : false;
+             const padTop = (!isSlide && contentArea) ? getContentPaddingTopPx(contentArea) : 0;
+             const lineIndex = (!isSlide && contentArea) ? getScrollLineIndex(scrollPos, padTop, LINE_HEIGHT) : null;
+@@ -2400,7 +2594,7 @@
+                     }
+                 } catch (e) {}
+             }
+-            lastTxtProgress = { absolutePos: absPos, percent, chunkStart, ratio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, lineIndex };
++            lastTxtProgress = { absolutePos: absPos, percent, chunkStart, ratio, progressRatio: viewRatio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, lineIndex };
+             setActiveTxtTocIndex(chapterIndex);
+             updatePageIndicatorByTxtPos(absPos);
+             debugLog('saveTxtProgressFromView', { reason, data: lastTxtProgress });
+@@ -2410,7 +2604,7 @@
+                 percent,
+                 scrollPos,
+                 chunkStart,
+-                { kind: 'txt', ratio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, lineIndex, reason, nearEdge, flipMode: currentFlipMode }
++                { kind: 'txt', ratio, progressRatio: viewRatio, chapterIndex, activeElementId: txtActiveAnchorId, anchorOffset, lineIndex, reason, nearEdge, flipMode: currentFlipMode }
+             );
+         }
+ 
+@@ -2863,7 +3057,10 @@
+             // document.getElementById('flipModeText').innerText = '滚动';
+             contentArea.classList.remove('mode-slide');
+             contentArea.classList.remove('mode-sim');
++            contentArea.classList.remove('slide');
++            contentArea.classList.add('scroll');
+             document.getElementById('readerView').classList.remove('flip-slide');
++            try { syncReaderModeUI('scroll'); } catch (e) {}
+             
+             lockBodyScroll(true);
+             const readerViewEl = document.getElementById('readerView');
+@@ -2954,6 +3151,11 @@
+                         const ratio = savedProgress && savedProgress.ratio !== undefined && savedProgress.ratio !== null
+                             ? parseFloat(savedProgress.ratio)
+                             : NaN;
++                        const savedFlipMode = savedProgress && savedProgress.flipMode ? normalizeReaderMode(savedProgress.flipMode) : null;
++                        const savedViewRatioRaw = savedProgress && savedProgress.progressRatio !== undefined && savedProgress.progressRatio !== null
++                            ? parseFloat(savedProgress.progressRatio)
++                            : (savedProgress && savedProgress.scrollRatio !== undefined && savedProgress.scrollRatio !== null ? parseFloat(savedProgress.scrollRatio) : NaN);
++                        const savedViewRatio = Number.isFinite(savedViewRatioRaw) ? clamp01(savedViewRatioRaw) : NaN;
+                         const posFromRatio = Number.isFinite(ratio)
+                             ? Math.max(0, Math.min(currentTxtContent.length - 1, Math.floor(ratio * currentTxtContent.length)))
+                             : NaN;
+@@ -3005,6 +3207,13 @@
+                                             if (openSession !== txtSessionId) return;
+                                             schedulePersistTxtAnchorProgress('auto');
+                                         }, 0);
++                                        setTimeout(() => {
++                                            if (openSession !== txtSessionId) return;
++                                            const preferred = getStoredReaderMode();
++                                            if (preferred === 'slide' && savedFlipMode === 'slide' && Number.isFinite(savedViewRatio)) progressRatio = savedViewRatio;
++                                            if (preferred === 'slide') setFlipMode('slide');
++                                            else setFlipMode('scroll');
++                                        }, 0);
+                                     }, 100);
+                                 }
+                                 return;
+@@ -3044,6 +3253,13 @@
+                                     if (openSession !== txtSessionId) return;
+                                     schedulePersistTxtAnchorProgress('auto');
+                                 }, 0);
++                                setTimeout(() => {
++                                    if (openSession !== txtSessionId) return;
++                                    const preferred = getStoredReaderMode();
++                                    if (preferred === 'slide' && savedFlipMode === 'slide' && Number.isFinite(savedViewRatio)) progressRatio = savedViewRatio;
++                                    if (preferred === 'slide') setFlipMode('slide');
++                                    else setFlipMode('scroll');
++                                }, 0);
+                             }
+                         };
+                         setTimeout(async () => {
+@@ -3091,16 +3307,36 @@
+             return wrapped;
+         }
+ 
++        function getSlidePageStepPx(content) {
++            if (!content) return 1;
++            let gap = 0;
++            try {
++                const cs = window.getComputedStyle(content);
++                const v = parseFloat(cs.columnGap || '0');
++                gap = Number.isFinite(v) ? Math.max(0, v) : 0;
++            } catch (e) {}
++            return Math.max(1, (content.clientWidth || 1) + gap);
++        }
++
+         function snapSlideToPage() {
+             const content = document.getElementById('readerContent');
+             if (!content) return;
+             if (currentFlipMode !== 'slide') return;
+-            const pageWidth = content.clientWidth || 1;
+-            const nextLeft = Math.round(content.scrollLeft / pageWidth) * pageWidth;
++            const step = getSlidePageStepPx(content);
++            const nextLeft = Math.round((content.scrollLeft || 0) / step) * step;
+             if (Math.abs(nextLeft - content.scrollLeft) < 2) return;
+             content.scrollTo({ left: nextLeft, behavior: 'smooth' });
+         }
+ 
++        function scrollSlidePage(direction, pageWidth = null) {
++            const content = document.getElementById('readerContent');
++            if (!content) return;
++            if (currentFlipMode !== 'slide') return;
++            const base = Number.isFinite(pageWidth) && pageWidth > 0 ? pageWidth : (content.clientWidth || 1);
++            const step = Math.max(1, base + (getSlidePageStepPx(content) - (content.clientWidth || 1)));
++            content.scrollBy({ left: (direction > 0 ? 1 : -1) * step, behavior: 'smooth' });
++        }
++
+         let txtScrollRaf = null;
+         function attachTxtScrollHandler(session = txtSessionId) {
+             const contentArea = document.getElementById('readerContent');
+@@ -3112,7 +3348,7 @@
+             }
+             txtScrollHandler = () => {
+                 if (session !== txtSessionId) return;
+-                if (currentFlipMode !== 'scroll') return;
++                if (currentFlipMode !== 'scroll' && currentFlipMode !== 'slide') return;
+                 if (isRestoringTxt) return;
+                 if (isClosingReader) return;
+                 if (hasAnyReaderPanelOpen()) return;
+@@ -3122,6 +3358,7 @@
+                     try {
+                         const snap = getTxtProgressData();
+                         if (!snap || !Number.isFinite(snap.absolutePos)) return;
++                        progressRatio = clamp01(snap.scrollRatio);
+                         const abs = Math.max(0, Math.min(currentTxtContent.length - 1, snap.absolutePos));
+                         if (!Number.isFinite(abs)) return;
+                         if (abs === txtActiveAbsPos) return;
+@@ -3145,7 +3382,12 @@
+             txtPagedResizeTimer = setTimeout(() => {
+                 if (!currentTxtContent) return;
+                 if (currentFlipMode !== 'slide' && currentFlipMode !== 'simulation') return;
+-                buildTxtPagedView(currentFlipMode, Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
++                if (currentFlipMode === 'simulation') {
++                    buildTxtPagedView(currentFlipMode, Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
++                    return;
++                }
++                snapSlideToPage();
++                schedulePersistTxtAnchorProgress('auto');
+             }, 140);
+         }, { passive: true });
+ 
+@@ -3209,7 +3451,7 @@
+                 : 0;
+             const loadedLength = parseInt(contentArea.getAttribute('data-render-length') || '0');
+             const resumeStart = Math.max(0, Math.floor(absolutePos / CHUNK_SIZE) * CHUNK_SIZE);
+-            return { absolutePos, percent, scrollTop: scrollPos, chunkStart: currentStart, scrollRatio, ratio, loadedLength, resumeStart };
++            return { absolutePos, percent, scrollTop: scrollPos, chunkStart: currentStart, scrollRatio, progressRatio: scrollRatio, ratio, loadedLength, resumeStart };
+         }
+ 
+         async function saveTxtProgressFromView(reason = 'auto') {
+@@ -3389,6 +3631,7 @@
+         }
+ 
+         function maybeAutoAppendTxt(force = false) {
++            if (currentFlipMode !== 'scroll') return;
+             if (!currentTxtContent) return;
+             if (isRestoringTxt) return;
+             if (isClosingReader) return;
+@@ -3417,6 +3660,7 @@
+         }
+ 
+         function maybeAutoPrependTxt(force = false) {
++            if (currentFlipMode !== 'scroll') return;
+             if (!currentTxtContent) return;
+             if (isRestoringTxt) return;
+             if (isClosingReader) return;
+@@ -4248,6 +4492,9 @@
+             if (moreMenu) moreMenu.classList.remove('active');
+             if (reader) reader.classList.add('menu-visible');
+             panel.classList.toggle('active');
++            if (panel.classList.contains('active')) {
++                try { syncReaderModeUI(); } catch (e) {}
++            }
+             try { updateReaderBottomSheetOffset(); setTimeout(updateReaderBottomSheetOffset, 260); } catch (e) {}
+         }
+         
+@@ -4310,7 +4557,8 @@
+             try {
+                 invalidateTxtCharsPerPage();
+                 if (currentTxtContent) {
+-                    if (currentFlipMode === 'slide') buildTxtPagedView('slide', Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
++                    if (currentFlipMode === 'simulation') buildTxtPagedView('simulation', Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
++                    else if (currentFlipMode === 'slide') setFlipMode('slide');
+                     else updatePageIndicatorByTxtPos(txtActiveAbsPos);
+                 }
+                 updateReaderBottomSheetOffset();
+@@ -4322,7 +4570,8 @@
+             try {
+                 invalidateTxtCharsPerPage();
+                 if (currentTxtContent) {
+-                    if (currentFlipMode === 'slide') buildTxtPagedView('slide', Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
++                    if (currentFlipMode === 'simulation') buildTxtPagedView('simulation', Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : null);
++                    else if (currentFlipMode === 'slide') setFlipMode('slide');
+                     else updatePageIndicatorByTxtPos(txtActiveAbsPos);
+                 }
+                 updateReaderBottomSheetOffset();
+diff --git a/index.html b/index.html
+index 20293c4..26eefa7 100644
+--- a/index.html
++++ b/index.html
+@@ -6,8 +6,8 @@
+     <title>MOZI</title>
+     <meta name="theme-color" content="#141218">
+     <link rel="manifest" href="/manifest.json">
+-    <link rel="apple-touch-icon" sizes="180x180" href="/mozi_icon_180.png">
+-    <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/mozi_icon_180.png">
++    <link rel="apple-touch-icon" href="/mozi_icon_192.png">
++    <link rel="icon" type="image/png" sizes="192x192" href="/mozi_icon_192.png">
+     <link rel="icon" type="image/svg+xml" href="./icon.svg?v=9">
+     <meta http-equiv="refresh" content="0; url=design_v14_functionality.html">
+ </head>
+-- 
+2.52.0.windows.1
+

@@ -660,46 +660,51 @@
         .reader-mode-option.active { opacity: 1; font-weight: 600; color: #333333 !important; }
         .reader-mode-option--disabled { opacity: 0.35; cursor: not-allowed; }
 
-        .reader-content.slide {
-            box-sizing: border-box;
-            height: 100vh !important;
-            width: 100vw !important;
-            padding-top: calc(env(safe-area-inset-top) + 30px) !important;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 80px) !important;
-            padding-left: 0 !important;
-            padding-right: 0 !important;
+        .reader-content.slide  {
+            height: 100vh !important ;
+            width: 100vw !important ;
+            overflow-x: scroll !important ;
+            overflow-y: hidden !important ;
             column-width: 100vw;
             column-gap: 60px;
             column-fill: auto;
-            overflow-x: scroll !important;
-            overflow-y: hidden !important;
-            touch-action: pan-x !important;
             scroll-snap-type: x mandatory;
-            scroll-snap-stop: normal;
-            transform: translateZ(0);
-            will-change: scroll-position;
+            touch-action: pan-x !important ;
+            scroll-behavior: auto;
+            box-sizing : border-box;
+            padding-top: calc(env(safe-area-inset-top) + 20px) !important ;
+            padding-bottom: calc(env(safe-area-inset-bottom) + 40px) !important ;
+            padding-left: 0 !important ;
+            padding-right: 0 !important ;
+            margin: 0 !important ;
         }
-        .reader-content.slide .reader-content-inner {
-            height: 100%;
-            column-fill: auto;
-            display: contents;
-        }
+
+        .reader-content.slide .reader-content-inner { display: contents; }
+
         .reader-content.slide p {
-            scroll-snap-align: start;
-            break-inside: avoid;
-            padding: 0 20px;
-            margin-bottom: 0;
-            margin-top: 0;
-            font-weight: normal !important;
             font-size: var(--reader-font-size) !important;
-            margin-block-start: 0;
-        }
-        .reader-content.slide p::first-line {
             font-weight: normal !important;
-            font-size: inherit !important;
+            line-height: 1.8 !important;
+            text-align: justify;
+            margin: 0 20px 0 20px !important;
+            break-inside: avoid;
+            scroll-snap-align: start;
         }
-        .reader-content.slide .reader-interaction-layer {
-            display: none;
+
+        .reader-content.slide h1,
+        .reader-content.slide h2,
+        .reader-content.slide .chapter-title {
+            break-before: column;
+            margin-top: 40px;
+            padding: 0 20px;
+            font-size: 1.5em !important;
+            font-weight: bold !important;
+            text-align: center;
+        }
+
+        .reader-content.slide .menu-mask,
+        .reader-content.slide .overlay {
+            display: none !important;
         }
         .mode-sim {
             overflow: hidden;

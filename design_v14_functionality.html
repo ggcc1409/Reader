@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -1294,14 +1294,16 @@
                 contentArea.classList.remove('reader-content-slide');
                 if (currentFlipMode !== 'simulation') contentArea.classList.remove('mode-sim');
                 if (currentFlipMode === 'slide') {
-                    contentArea.scrollTop = 0;
-                    setTimeout(() => {
-                        applyProgressRatioToContent('slide');
-                        snapSlideToPage('auto');
-                    }, 0);
+                    currentChapterId = Number.isFinite(currentTxtTocActiveIndex) ? currentTxtTocActiveIndex : null;
+                    savedProgressRatio = Number.isFinite(progressRatio) ? progressRatio : 0;
+                    shouldResetPosition = false;
+                    lastModeForSync = prevMode;
+                    setTimeout(syncReaderModeState, 0);
                 } else if (currentFlipMode === 'scroll') {
-                    contentArea.scrollLeft = 0;
-                    setTimeout(() => applyProgressRatioToContent('scroll'), 0);
+                    currentChapterId = Number.isFinite(currentTxtTocActiveIndex) ? currentTxtTocActiveIndex : null;
+                    shouldResetPosition = false;
+                    lastModeForSync = prevMode;
+                    setTimeout(syncReaderModeState, 0);
                 }
             }
 
@@ -1534,7 +1536,7 @@
         function turnTxtPaged(direction) {
             if (txtPagedTurnLock) return;
             if (!currentBookId || !currentTxtContent) return;
-            if (currentFlipMode !== 'slide' && currentFlipMode !== 'simulation') return;
+            if (currentFlipMode !== 'simulation') return;
             const contentArea = document.getElementById('readerContent');
             if (!contentArea) return;
             const CHUNK_SIZE = 15000;
@@ -1801,6 +1803,12 @@
         }
         let currentFlipMode = 'scroll';
         let progressRatio = 0;
+        const containerRef = { current: null };
+        let savedProgressRatio = NaN;
+        let shouldResetPosition = false;
+        let currentChapterId = null;
+        let lastModeForSync = null;
+        let slideRenderedChapterId = null;
         let lastFlipGestureAt = 0;
         let txtParagraphObserver = null;
         let txtSentinelObserver = null;
@@ -1951,13 +1959,29 @@
             lastFlipGestureAt = Date.now();
             if (intent === 'prev') {
                 if (currentTxtContent && currentFlipMode === 'simulation') turnTxtPaged(-1);
-                else if (currentTxtContent && currentFlipMode === 'slide') scrollSlidePage(-1);
+                else if (currentTxtContent && currentFlipMode === 'slide') {
+                    const { innerWidth } = window ;
+                    const container = containerRef.current || document.getElementById('readerContent');
+                    containerRef.current = container;
+                    if (!container) return;
+                    if (container.scrollLeft <= 5) loadPrevChapter();
+                    else container.scrollBy({ left: -innerWidth, behavior: 'smooth' });
+                }
                 else scrollPage(-1);
                 return;
             }
             if (intent === 'next') {
                 if (currentTxtContent && currentFlipMode === 'simulation') turnTxtPaged(1);
-                else if (currentTxtContent && currentFlipMode === 'slide') scrollSlidePage(1);
+                else if (currentTxtContent && currentFlipMode === 'slide') {
+                    const { innerWidth } = window ;
+                    const container = containerRef.current || document.getElementById('readerContent');
+                    containerRef.current = container;
+                    if (!container) return;
+                    const currentScroll = Math.ceil(container.scrollLeft);
+                    const remaining = container.scrollWidth - (currentScroll + innerWidth);
+                    if (remaining <= 5) loadNextChapter();
+                    else container.scrollBy({ left: innerWidth, behavior: 'smooth' });
+                }
                 else scrollPage(1);
             }
         }
@@ -1989,6 +2013,210 @@
             setTimeout(() => { isDraggingRef.current = false; }, 350);
         }
 
+        function slideClampTocIndex(idx) {
+            const total = Array.isArray(currentTxtToc) ? currentTxtToc.length : 0;
+            if (total <= 0) return 0;
+            const i = Math.floor(Number(idx));
+            if (!Number.isFinite(i)) return 0;
+            return Math.max(0, Math.min(total - 1, i));
+        }
+
+        function slideGetChapterBoundsByIndex(idx) {
+            const total = Array.isArray(currentTxtToc) ? currentTxtToc.length : 0;
+            if (total <= 0) return null;
+            const i = slideClampTocIndex(idx);
+            const startAbsRaw = currentTxtToc[i] && currentTxtToc[i].position !== undefined ? Number(currentTxtToc[i].position) : NaN;
+            const startAbs = Number.isFinite(startAbsRaw) ? Math.max(0, Math.min(currentTxtContent.length - 1, Math.floor(startAbsRaw))) : 0;
+            const nextRaw = (i + 1 < total) && currentTxtToc[i + 1] && currentTxtToc[i + 1].position !== undefined ? Number(currentTxtToc[i + 1].position) : NaN;
+            const endAbs = Number.isFinite(nextRaw) ? Math.max(startAbs, Math.min(currentTxtContent.length, Math.floor(nextRaw))) : currentTxtContent.length;
+            const title = currentTxtToc[i] && currentTxtToc[i].label ? String(currentTxtToc[i].label) : '';
+            return { idx: i, startAbs, endAbs, title };
+        }
+
+        function renderSlideChapterByIndex(idx) {
+            if (currentFlipMode !== 'slide') return;
+            if (!currentBookId || !currentTxtContent) return;
+            const bounds = slideGetChapterBoundsByIndex(idx);
+            if (!bounds) return;
+
+            const container = containerRef.current || document.getElementById('readerContent');
+            const inner = document.getElementById('readerContentInner');
+            containerRef.current = container;
+            if (!container || !inner) return;
+
+            const chapterText = currentTxtContent.slice(bounds.startAbs, bounds.endAbs);
+            const titleTrim = (bounds.title || '').trim();
+            const lines = chapterText.split('\n');
+            const firstLineTrim = (lines && lines.length > 0) ? String(lines[0] || '').replace(/\r$/, '').trim() : '';
+            const skipFirstLine = Boolean(titleTrim) && firstLineTrim === titleTrim;
+
+            const anchorId = txtAnchorIdForAbsPos(currentBookId, bounds.startAbs);
+            let html = `<p id="${anchorId}" data-abs="${bounds.startAbs}" data-pos="0" data-anchor="1" style="margin:0;height:0;"></p>`;
+            if (titleTrim) html += `<h1>${escapeHtml(titleTrim)}</h1>`;
+
+            let relPos = 0;
+            for (let i = 0; i < lines.length; i += 1) {
+                const line = String(lines[i] || '').replace(/\r$/, '');
+                const lineStartRel = relPos;
+                relPos += line.length + 1;
+                if (skipFirstLine && i === 0) continue;
+                if (!line.trim()) continue;
+                const abs = bounds.startAbs + lineStartRel;
+                const id = txtAnchorIdForAbsPos(currentBookId, abs);
+                html += `<p id="${id}" data-abs="${abs}" data-pos="${lineStartRel}" class="reader-txt-paragraph">${escapeHtml(line)}</p>`;
+            }
+
+            inner.innerHTML = html;
+            container.setAttribute('data-chunk-start', String(bounds.startAbs));
+            container.setAttribute('data-render-length', String(Math.max(0, bounds.endAbs - bounds.startAbs)));
+            container.removeAttribute('data-next-start');
+
+            txtActiveAnchorId = anchorId;
+            txtActiveAbsPos = bounds.startAbs;
+            setActiveTxtTocIndex(bounds.idx);
+            slideRenderedChapterId = bounds.idx;
+
+            try { container.style.scrollBehavior = 'auto'; } catch (e) {}
+            try { container.scrollTop = 0; } catch (e) {}
+
+            observeTxtContainer();
+            attachTxtScrollHandler();
+            schedulePersistTxtAnchorProgress('auto');
+
+            const { innerWidth } = window ;
+            if (shouldResetPosition) {
+                try { container.scrollLeft = 0; } catch (e) {}
+            } else if (Number.isFinite(savedProgressRatio)) {
+                try { container.scrollLeft = savedProgressRatio * (container.scrollWidth - innerWidth); } catch (e) {}
+            } else {
+                try { container.scrollLeft = 0; } catch (e) {}
+            }
+        }
+
+        function restoreScrollFromAbs(abs) {
+            if (!currentTxtContent) return;
+            const session = txtSessionId;
+            const pos = Number.isFinite(Number(abs))
+                ? Math.max(0, Math.min(currentTxtContent.length - 1, Math.floor(Number(abs))))
+                : 0;
+            const CHUNK_SIZE = 15000;
+            const startPos = Math.max(0, Math.floor(pos / CHUNK_SIZE) * CHUNK_SIZE);
+            renderTxtChunk(startPos);
+            setTimeout(() => {
+                if (session !== txtSessionId) return;
+                const contentArea = document.getElementById('readerContent');
+                if (!contentArea) return;
+                observeTxtContainer(session);
+                const ps = Array.from(contentArea.querySelectorAll('p[data-abs]'));
+                let target = null;
+                for (const p of ps) {
+                    const a = parseInt(p.getAttribute('data-abs') || 'NaN', 10);
+                    if (!Number.isFinite(a)) continue;
+                    if (a <= pos) target = p;
+                    else break;
+                }
+                if (!target && ps.length > 0) target = ps[0];
+                if (target) scrollParagraphIntoView(target);
+                schedulePersistTxtAnchorProgress('auto');
+            }, 0);
+        }
+
+        function syncReaderModeState() {
+            const container = containerRef.current || document.getElementById('readerContent');
+            containerRef.current = container;
+            if (!container) return;
+
+            const { innerWidth } = window ;
+
+            if (currentFlipMode === 'scroll') {
+                container.style.scrollSnapType = 'none';
+                if (lastModeForSync === 'slide') restoreScrollFromAbs(txtActiveAbsPos);
+                else applyProgressRatioToContent('scroll');
+                lastModeForSync = null;
+                return;
+            }
+
+            if (currentFlipMode === 'slide') {
+                container.style.scrollSnapType = 'x mandatory';
+                try { container.scrollTop = 0; } catch (e) {}
+                const idx = Number.isFinite(currentChapterId)
+                    ? slideClampTocIndex(currentChapterId)
+                    : (Number.isFinite(currentTxtTocActiveIndex) ? slideClampTocIndex(currentTxtTocActiveIndex) : slideClampTocIndex(computeTxtChapterIndexByAbsPos(Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : 0)));
+                if (slideRenderedChapterId !== idx) {
+                    renderSlideChapterByIndex(idx);
+                    return;
+                }
+                if (shouldResetPosition) {
+                    try { container.scrollLeft = 0; } catch (e) {}
+                } else if (Number.isFinite(savedProgressRatio)) {
+                    try { container.scrollLeft = savedProgressRatio * (container.scrollWidth - innerWidth); } catch (e) {}
+                }
+            }
+        }
+
+        function loadPrevChapter() {
+            if (!currentTxtToc || currentTxtToc.length <= 0) return;
+            const idx = (Number.isFinite(currentTxtTocActiveIndex) && currentTxtTocActiveIndex >= 0)
+                ? currentTxtTocActiveIndex
+                : (Number.isFinite(txtActiveAbsPos) ? computeTxtChapterIndexByAbsPos(txtActiveAbsPos) : 0);
+            if (idx <= 0) return;
+            currentChapterId = idx - 1;
+            shouldResetPosition = true;
+            renderSlideChapterByIndex(idx - 1);
+            setTimeout(() => { shouldResetPosition = false; }, 0);
+        }
+
+        function loadNextChapter() {
+            if (!currentTxtToc || currentTxtToc.length <= 0) return;
+            const idx = (Number.isFinite(currentTxtTocActiveIndex) && currentTxtTocActiveIndex >= 0)
+                ? currentTxtTocActiveIndex
+                : (Number.isFinite(txtActiveAbsPos) ? computeTxtChapterIndexByAbsPos(txtActiveAbsPos) : 0);
+            if (idx + 1 >= currentTxtToc.length) return;
+            currentChapterId = idx + 1;
+            shouldResetPosition = true;
+            renderSlideChapterByIndex(idx + 1);
+            setTimeout(() => { shouldResetPosition = false; }, 0);
+        }
+
+        const handleSlideClick = (e) =>  {
+            const  { clientX } = e;
+            const { innerWidth } = window ;
+            const  container = containerRef.current || document.getElementById('readerContent');
+            containerRef.current = container;
+            if (!container || !Number.isFinite(clientX)) { toggleMenu(); return ; }
+            
+            const isLeft = clientX < innerWidth * 0.3 ;
+            const isRight = clientX > innerWidth * 0.7 ;
+            
+            if  (!isLeft && !isRight) { 
+                toggleMenu(); 
+                return ; 
+            } 
+        
+            if (isLeft) { 
+                if (container.scrollLeft <= 5) { 
+                    console.log('Slide Mode: Loading Previous Chapter'); 
+                    loadPrevChapter();
+                } else { 
+                    container.scrollBy({ left: -innerWidth, behavior: 'smooth' }); 
+                } 
+                return; 
+            } 
+        
+            if (isRight) { 
+                const currentScroll = Math.ceil(container.scrollLeft); 
+                const remaining = container.scrollWidth - (currentScroll + innerWidth); 
+                
+                if (remaining <= 5) { 
+                    console.log('Slide Mode: End of Chapter, Loading Next'); 
+                    loadNextChapter();
+                } else { 
+                    container.scrollBy({ left: innerWidth, behavior: 'smooth' }); 
+                } 
+                return; 
+            } 
+        }; 
+
         const handleSlideTouchEnd = (e) => {
             if (currentFlipMode !== 'slide') return;
             if (!e || !e.changedTouches || !e.changedTouches[0]) return;
@@ -2003,7 +2231,7 @@
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropagation) e.stopPropagation();
             if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-            handleSlideModeClick({ clientX: endX, clientY: endY });
+            handleSlideClick({ clientX: endX, clientY: endY });
         };
 
         const handleScrollModeClick = (e) => {
@@ -2011,62 +2239,10 @@
             dispatchReaderInteractionIntent(intent, e);
         };
 
-        const handleSlideModeClick = (e) => {
-            const { clientX } = e;
-            const width = window.innerWidth || 1;
-            const third = width / 3;
-            if (clientX < third) {
-                const readerView = document.getElementById('readerView');
-                if (readerView && readerView.classList.contains('menu-visible')) return;
-                if (hasAnyReaderPanelOpen()) return;
-                if (isSlideScrollingRef.current) return;
-                isSlideScrollingRef.current = true;
-                lastFlipGestureAt = Date.now();
-                const content = document.getElementById('readerContent');
-                const left = content ? (content.scrollLeft || 0) : 0;
-                if (content && left <= 5) {
-                    const hasToc = Array.isArray(currentTxtToc) && currentTxtToc.length > 0;
-                    if (hasToc && Number.isFinite(currentTxtTocActiveIndex) && currentTxtTocActiveIndex > 0) {
-                        const prevIdx = Math.max(0, currentTxtTocActiveIndex - 1);
-                        const prevPos = currentTxtToc[prevIdx] && Number.isFinite(Number(currentTxtToc[prevIdx].position))
-                            ? Number(currentTxtToc[prevIdx].position)
-                            : 0;
-                        jumpToTxtPosition(prevPos, prevIdx);
-                    } else {
-                        try { turnTxtPaged(-1); } catch (e) {}
-                    }
-                } else {
-                    scrollSlidePage(-1, width);
-                }
-                setTimeout(() => { isSlideScrollingRef.current = false; }, 500);
-                return;
-            }
-            if (clientX > third * 2) {
-                const readerView = document.getElementById('readerView');
-                if (readerView && readerView.classList.contains('menu-visible')) return;
-                if (hasAnyReaderPanelOpen()) return;
-                if (isSlideScrollingRef.current) return;
-                isSlideScrollingRef.current = true;
-                lastFlipGestureAt = Date.now();
-                const content = document.getElementById('readerContent');
-                const left = content ? (content.scrollLeft || 0) : 0;
-                const cw = content ? (content.clientWidth || 0) : 0;
-                const sw = content ? (content.scrollWidth || 0) : 0;
-                if (content && Math.ceil(left + cw) >= sw) {
-                    try { turnTxtPaged(1); } catch (e) {}
-                } else {
-                    scrollSlidePage(1, width);
-                }
-                setTimeout(() => { isSlideScrollingRef.current = false; }, 500);
-                return;
-            }
-            toggleMenu({ event: e, ignoreGuard: true });
-        };
-
         const handleMainClick = (e) => {
             if (isDraggingRef.current) return;
             if (!e) return;
-            if (currentFlipMode === 'slide') handleSlideModeClick(e);
+            if (currentFlipMode === 'slide') handleSlideClick(e);
             else handleScrollModeClick(e);
         };
 
@@ -2406,8 +2582,23 @@
                 if (dt > 650) return;
                 const direction = dx < 0 ? 1 : -1;
                 lastFlipGestureAt = Date.now();
-                if (currentFlipMode === 'slide') scrollSlidePage(direction);
-                else turnTxtPaged(direction);
+                if (currentFlipMode === 'slide') {
+                    const { innerWidth } = window ;
+                    const container = containerRef.current || contentArea;
+                    containerRef.current = container;
+                    if (!container) return;
+                    if (direction < 0) {
+                        if (container.scrollLeft <= 5) loadPrevChapter();
+                        else container.scrollBy({ left: -innerWidth, behavior: 'smooth' });
+                    } else {
+                        const currentScroll = Math.ceil(container.scrollLeft);
+                        const remaining = container.scrollWidth - (currentScroll + innerWidth);
+                        if (remaining <= 5) loadNextChapter();
+                        else container.scrollBy({ left: innerWidth, behavior: 'smooth' });
+                    }
+                } else {
+                    turnTxtPaged(direction);
+                }
             };
 
             const ensureSimDrag = (direction) => {
@@ -2983,6 +3174,7 @@
                     const prevIdx = prev.getAttribute('data-toc-index');
                     if (Number.isFinite(Number(prevIdx)) && Number(prevIdx) === i) {
                         currentTxtTocActiveIndex = i;
+                        currentChapterId = i;
                         if (prevIndex !== i) {
                             const tocPanel = document.getElementById('tocPanel');
                             if (tocPanel && tocPanel.classList.contains('active')) setTimeout(scrollTocActiveIntoView, 0);
@@ -2996,6 +3188,7 @@
                 if (next) next.classList.add('active');
             }
             currentTxtTocActiveIndex = i;
+            currentChapterId = i;
             if (prevIndex !== i) {
                 const tocPanel = document.getElementById('tocPanel');
                 if (tocPanel && tocPanel.classList.contains('active')) setTimeout(scrollTocActiveIntoView, 0);
@@ -4020,15 +4213,24 @@
                     else if (currentFlipMode === 'slide') contentArea.scrollLeft = 0;
                 } catch (e) {}
             }
-            if (contentArea && (currentFlipMode === 'slide' || currentFlipMode === 'simulation')) {
+            if (contentArea && currentFlipMode === 'simulation') {
                 contentArea.setAttribute('data-chunk-start', String(startPos));
                 contentArea.setAttribute('data-render-length', String(Math.min(CHUNK_SIZE, currentTxtContent.length - startPos)));
                 if (startPos + CHUNK_SIZE < currentTxtContent.length) contentArea.setAttribute('data-next-start', String(startPos + CHUNK_SIZE));
                 else contentArea.removeAttribute('data-next-start');
-                buildTxtPagedView(currentFlipMode, Number.isFinite(tocIdx) ? startPos : pos);
+                buildTxtPagedView('simulation', Number.isFinite(tocIdx) ? startPos : pos);
                 closeTOC();
                 if (Number.isFinite(tocIdx)) setActiveTxtTocIndex(tocIdx);
                 else updateActiveTxtTocByPos(pos);
+                schedulePersistTxtAnchorProgress('auto');
+                return;
+            }
+            if (currentFlipMode === 'slide' && Number.isFinite(tocIdx)) {
+                currentChapterId = tocIdx;
+                shouldResetPosition = true;
+                renderSlideChapterByIndex(tocIdx);
+                closeTOC();
+                setTimeout(() => { shouldResetPosition = false; }, 0);
                 schedulePersistTxtAnchorProgress('auto');
                 return;
             }
