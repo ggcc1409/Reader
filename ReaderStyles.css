@@ -682,11 +682,15 @@
         .reader-content.slide .reader-content-inner { display: contents; }
 
         .reader-content.slide p {
+            line-height: var(--reader-line-height, 1.6) !important;
+            margin-bottom: 0.6em !important;
+            margin-top: 0 !important;
             font-size: var(--reader-font-size) !important;
             font-weight: normal !important;
-            line-height: 1.8 !important;
             text-align: justify;
-            margin: 0 20px 0 20px !important;
+            width: calc(100vw - 40px);
+            margin-left: 20px !important;
+            margin-right: 20px !important;
             break-inside: avoid;
             scroll-snap-align: start;
         }

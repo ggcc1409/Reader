@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -2139,6 +2139,18 @@
             if (currentFlipMode === 'slide') {
                 container.style.scrollSnapType = 'x mandatory';
                 try { container.scrollTop = 0; } catch (e) {}
+
+                if (lastModeForSync !== 'slide') {
+                    try { container.scrollLeft = 0; } catch (e) {}
+                    setTimeout(() => {
+                        if (currentFlipMode !== 'slide') return;
+                        const c = containerRef.current || document.getElementById('readerContent');
+                        containerRef.current = c;
+                        if (c) c.scrollLeft = 0;
+                    }, 50);
+                    lastModeForSync = 'slide';
+                }
+
                 const idx = Number.isFinite(currentChapterId)
                     ? slideClampTocIndex(currentChapterId)
                     : (Number.isFinite(currentTxtTocActiveIndex) ? slideClampTocIndex(currentTxtTocActiveIndex) : slideClampTocIndex(computeTxtChapterIndexByAbsPos(Number.isFinite(txtActiveAbsPos) ? txtActiveAbsPos : 0)));
